@@ -4,6 +4,12 @@ Todos los cambios importantes de este proyecto se documentan en este archivo.
 
 El formato sigue una estructura basada en Keep a Changelog y versionado semantico.
 
+Politica actual de versiones (pre-1.0):
+
+- `0.MINOR.0` para nuevas funcionalidades o cambios relevantes.
+- `0.MINOR.PATCH` para correcciones compatibles.
+- `1.0.0` cuando el producto este estable para un ciclo mayor.
+
 ## [Unreleased]
 
 ### Added
