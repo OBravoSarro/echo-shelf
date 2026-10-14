@@ -16,6 +16,7 @@ dist-ssr
 test-results
 .firebase/
 .opencode/server.lock.json
+.husky/_
 *.local
 
 # Editor directories and files
