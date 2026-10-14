@@ -14,6 +14,10 @@ Politica actual de versiones (pre-1.0):
 
 ### Added
 - Base inicial del proyecto `echo-shelf` con Vite + React + TypeScript.
+- Bloque de version en Ajustes con version actual, ultima version disponible y verificacion manual.
+
+### Technical
+- Inyeccion de version de app en build (`__APP_VERSION__`) y endpoint estatico `public/version.json` para chequeo de updates.
 
 ## [0.1.0] - 2026-10-14
 

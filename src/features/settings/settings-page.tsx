@@ -1,9 +1,10 @@
-import { Cloud, FolderSearch, RefreshCw, ShieldCheck, Unplug } from 'lucide-react'
+import { CheckCircle2, Cloud, FolderSearch, RefreshCw, ShieldCheck, Unplug, XCircle } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { UserAvatar } from '../../components/ui/user-avatar'
 import type { DriveFile } from '../../infrastructure/google-drive/types'
 import { driveApi } from '../../infrastructure/google-drive/drive-api'
+import { compareSemver, CURRENT_APP_VERSION, fetchLatestVersion } from '../../lib/app-version'
 import { env, hasFirebaseAuthConfig } from '../../lib/env'
 import { useAuthStore } from '../auth/auth-store'
 import { useLibraryStore } from '../library/library-store'
@@ -24,6 +25,9 @@ export const SettingsPage = () => {
   const [pickerCurrentId, setPickerCurrentId] = useState('root')
   const [pickerLoading, setPickerLoading] = useState(false)
   const [pickerError, setPickerError] = useState<string | undefined>()
+  const [latestVersion, setLatestVersion] = useState<string | undefined>()
+  const [versionCheckError, setVersionCheckError] = useState<string | undefined>()
+  const [checkingVersion, setCheckingVersion] = useState(false)
   const showReconnect = auth.reconnectRequired && Boolean(auth.displayName || auth.email || auth.photoUrl || auth.userId)
 
   const syncStatusTone: Record<NonNullable<typeof library.cloudSyncStatus>, string> = {
@@ -62,6 +66,23 @@ export const SettingsPage = () => {
     setPickerOpen(true)
     await loadFolders('root', [])
   }
+
+  const checkVersion = async () => {
+    setCheckingVersion(true)
+    setVersionCheckError(undefined)
+    try {
+      const result = await fetchLatestVersion()
+      setLatestVersion(result.latestVersion)
+    } catch {
+      setVersionCheckError('No se pudo verificar la ultima version en este momento.')
+    } finally {
+      setCheckingVersion(false)
+    }
+  }
+
+  useEffect(() => {
+    void checkVersion()
+  }, [])
 
   const selectRoot = async (id: string) => {
     setManualRootId(id)
@@ -216,6 +237,41 @@ export const SettingsPage = () => {
           <li>- No se suben audiolibros a servidores propios.</li>
           <li>- Descargas locales se conservan hasta que las elimines manualmente.</li>
         </ul>
+      </motion.article>
+
+      <motion.article variants={reduceMotion ? undefined : sectionVariants} className="rounded-2xl border border-white/10 bg-white/6 p-4 text-sm text-slate-200">
+        <h2 className="mb-3 text-lg font-medium text-white">Version de la app</h2>
+        <div className="space-y-2">
+          <p>Version actual: <span className="font-semibold text-white">v{CURRENT_APP_VERSION}</span></p>
+          {latestVersion ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p>Ultima disponible: <span className="font-semibold text-white">v{latestVersion}</span></p>
+              {compareSemver(CURRENT_APP_VERSION, latestVersion) >= 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2.5 py-1 text-xs text-emerald-100">
+                  <CheckCircle2 className="size-3.5" /> Estas en la ultima version
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-xs text-amber-100">
+                  <XCircle className="size-3.5" /> Hay una version mas nueva
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400">Ultima disponible: no verificada</p>
+          )}
+          {versionCheckError && <p className="text-xs text-amber-200">{versionCheckError}</p>}
+          <button
+            type="button"
+            onClick={() => {
+              void checkVersion()
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs"
+            disabled={checkingVersion}
+          >
+            <RefreshCw className={`size-3.5 ${checkingVersion ? 'animate-spin' : ''}`} />
+            {checkingVersion ? 'Verificando...' : 'Verificar version'}
+          </button>
+        </div>
       </motion.article>
 
       {pickerOpen && (
