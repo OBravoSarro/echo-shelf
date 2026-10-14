@@ -88,3 +88,8 @@ Flujo:
 5. Merge local a `main` cuando todo este verde.
 
 Cuando exista remoto, mantener el mismo flujo con PR antes de merge.
+
+## 7) Releases
+
+- Seguir el checklist de `RELEASE.md` para cada corte de version.
+- Mantener `CHANGELOG.md` en espanol y commits de release en ingles (Conventional Commits).
