@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="EchoShelf">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a0f3c"/>
+      <stop offset="100%" stop-color="#0d0620"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7b63ff"/>
+      <stop offset="100%" stop-color="#3cb8ff"/>
+    </linearGradient>
+    <linearGradient id="accent2" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f03daf"/>
+      <stop offset="100%" stop-color="#7b63ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo con radio generoso estilo iOS -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Libro: dos páginas simétricas como V invertida -->
+  <!-- Página izquierda -->
+  <path d="M256 148 L140 196 L140 364 L256 316 Z" fill="url(#accent2)" opacity="0.95"/>
+  <!-- Página derecha -->
+  <path d="M256 148 L372 196 L372 364 L256 316 Z" fill="url(#accent)" opacity="0.95"/>
+  <!-- Lomo central -->
+  <rect x="250" y="148" width="12" height="168" rx="6" fill="white" opacity="0.9"/>
+
+  <!-- Ondas de sonido: arcos concéntricos a la derecha -->
+  <path d="M310 236 Q340 256 310 276" fill="none" stroke="white" stroke-width="14" stroke-linecap="round" opacity="0.55"/>
+  <path d="M330 216 Q376 256 330 296" fill="none" stroke="white" stroke-width="12" stroke-linecap="round" opacity="0.32"/>
+  <path d="M350 198 Q412 256 350 314" fill="none" stroke="white" stroke-width="10" stroke-linecap="round" opacity="0.16"/>
+</svg>
