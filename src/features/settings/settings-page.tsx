@@ -233,7 +233,7 @@ export const SettingsPage = () => {
       <motion.article variants={reduceMotion ? undefined : sectionVariants} className="rounded-2xl border border-white/10 bg-white/6 p-4 text-sm text-slate-300">
         <h2 className="mb-2 inline-flex items-center gap-2 text-lg font-medium text-white"><ShieldCheck className="size-5" /> Privacidad</h2>
         <ul className="space-y-2">
-          <li>- Tokens guardados en IndexedDB y revocados al desconectar.</li>
+          <li>- Access token de Drive temporal en cliente y refresh token cifrado en cookie HttpOnly del backend.</li>
           <li>- No se suben audiolibros a servidores propios.</li>
           <li>- Descargas locales se conservan hasta que las elimines manualmente.</li>
         </ul>

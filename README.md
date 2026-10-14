@@ -34,6 +34,7 @@ Copia `.env.example` a `.env`.
 - `VITE_GOOGLE_DRIVE_ROOT_ID`: carpeta raiz inicial para escaneo Drive
 - `VITE_GOOGLE_BOOKS_API_KEY`: opcional para enriquecer metadatos con Google Books
 - `VITE_ENABLE_GOOGLE_BOOKS`: `true` para activar Google Books en enriquecimiento online
+- `VITE_AUTH_API_BASE_URL`: opcional; util para desarrollo apuntando a backend OAuth remoto
 
 ## Configurar Firebase + Drive
 
@@ -44,8 +45,16 @@ Copia `.env.example` a `.env`.
 5. Configura OAuth Consent Screen en modo Testing.
 6. Agrega tus cuentas como Test users.
 7. Copia configuracion web de Firebase y rellena `.env`.
+8. Crea OAuth Client (Web) en Google Cloud con redirect URI: `https://<tu-dominio>/api/oauth/google/callback`.
+9. En Vercel define variables de entorno backend:
+   - `GOOGLE_OAUTH_CLIENT_ID`
+   - `GOOGLE_OAUTH_CLIENT_SECRET`
+   - `GOOGLE_OAUTH_REDIRECT_URI`
+   - `TOKEN_ENCRYPTION_KEY`
+   - `FIREBASE_WEB_API_KEY`
+   - `APP_BASE_URL` (opcional, recomendado)
 
-El flujo implementado usa Firebase `signInWithPopup` y solicita scope `drive.readonly`.
+El flujo implementado usa Firebase `signInWithPopup` para identidad y un backend OAuth (`/api/oauth/google/*`) para mantener sesion persistente de Drive mediante refresh token cifrado en cookie HttpOnly.
 
 ## Flujo de uso
 
@@ -76,7 +85,7 @@ El flujo implementado usa Firebase `signInWithPopup` y solicita scope `drive.rea
 - No se garantiza continuidad de descarga con app suspendida.
 - Persistencia de almacenamiento depende de politicas del sistema.
 
-## Despliegue en Firebase
+## Despliegue frontend en Firebase
 
 1. Instala CLI: `npm i -g firebase-tools`
 2. Login: `firebase login`
@@ -85,3 +94,11 @@ El flujo implementado usa Firebase `signInWithPopup` y solicita scope `drive.rea
 5. Deploy hosting + firestore rules: `firebase deploy`
 
 El repo incluye `firebase.json`, `firestore.rules` y `firestore.indexes.json` para SPA + reglas por usuario autenticado.
+
+## Backend OAuth en Vercel
+
+- Rutas serverless incluidas:
+  - `POST /api/oauth/google/start`
+  - `GET /api/oauth/google/callback`
+  - `POST /api/oauth/google/refresh`
+- `vercel.json` mantiene fallback SPA sin romper `/api` gracias a `handle: filesystem`.

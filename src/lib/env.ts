@@ -12,6 +12,7 @@ const envSchema = z.object({
   VITE_GOOGLE_BOOKS_API_KEY: z.string().optional(),
   VITE_ENABLE_GOOGLE_BOOKS: z.enum(['true', 'false']).optional(),
   VITE_GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  VITE_AUTH_API_BASE_URL: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(import.meta.env)
@@ -32,6 +33,7 @@ export const env = {
   googleBooksApiKey: parsed.data.VITE_GOOGLE_BOOKS_API_KEY,
   enableGoogleBooks: parsed.data.VITE_ENABLE_GOOGLE_BOOKS === 'true',
   googleOauthClientId: parsed.data.VITE_GOOGLE_OAUTH_CLIENT_ID,
+  authApiBaseUrl: parsed.data.VITE_AUTH_API_BASE_URL,
 }
 
 export const hasFirebaseAuthConfig = Boolean(

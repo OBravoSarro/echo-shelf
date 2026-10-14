@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, setPersistence } from 'firebase/auth'
 import { initializeFirestore, memoryLocalCache, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore'
 import { env, hasFirebaseAuthConfig } from '../../lib/env'
 
@@ -17,6 +17,10 @@ const firebaseApp = hasFirebaseAuthConfig
 
 export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : undefined
 
+if (firebaseAuth) {
+  void setPersistence(firebaseAuth, browserLocalPersistence)
+}
+
 const supportsIndexedDb =
   typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined'
 
@@ -28,15 +32,12 @@ export const firestoreDb = firebaseApp
     })
   : undefined
 
-export const driveAuthProvider = hasFirebaseAuthConfig
+export const googleAuthProvider = hasFirebaseAuthConfig
   ? (() => {
       const provider = new GoogleAuthProvider()
       provider.addScope('openid')
       provider.addScope('email')
       provider.addScope('profile')
-      provider.addScope('https://www.googleapis.com/auth/drive.readonly')
-      provider.addScope('https://www.googleapis.com/auth/drive.metadata.readonly')
-      provider.setCustomParameters({ prompt: 'consent' })
       return provider
     })()
   : undefined
