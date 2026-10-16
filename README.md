@@ -85,15 +85,14 @@ El flujo implementado usa Firebase `signInWithPopup` para identidad y un backend
 - No se garantiza continuidad de descarga con app suspendida.
 - Persistencia de almacenamiento depende de politicas del sistema.
 
-## Despliegue frontend en Firebase
+## Firebase (solo Auth + Firestore)
 
 1. Instala CLI: `npm i -g firebase-tools`
 2. Login: `firebase login`
 3. Vincula proyecto: `firebase use --add`
-4. Build: `npm run build`
-5. Deploy hosting + firestore rules: `firebase deploy`
+4. Deploy reglas/indices de Firestore: `npm run firebase:deploy`
 
-El repo incluye `firebase.json`, `firestore.rules` y `firestore.indexes.json` para SPA + reglas por usuario autenticado.
+El frontend y backend se despliegan en Vercel. Firebase queda para autenticacion y sincronizacion en Firestore.
 
 ## Backend OAuth en Vercel
 
