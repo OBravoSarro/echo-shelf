@@ -1,7 +1,7 @@
 import { decryptJson } from '../../_lib/crypto.js'
 import { verifyFirebaseSession } from '../../_lib/firebase.js'
 import { refreshDriveAccessToken } from '../../_lib/google-oauth.js'
-import { clearCookie, json, methodNotAllowed, parseCookies } from '../../_lib/http.js'
+import { clearCookie, json, methodNotAllowed, parseCookies, shouldUseSecureCookies } from '../../_lib/http.js'
 
 const REFRESH_COOKIE_NAME = 'es_drive_rt'
 
@@ -14,6 +14,8 @@ export default async function handler(req, res) {
   if (!session.ok) {
     return json(res, session.status, { code: session.code, message: 'Sesion Firebase invalida.' })
   }
+
+  const useSecureCookies = shouldUseSecureCookies(req)
 
   const cookies = parseCookies(req)
   const encryptedRefreshPayload = cookies[REFRESH_COOKIE_NAME]
@@ -28,7 +30,12 @@ export default async function handler(req, res) {
   try {
     payload = decryptJson(encryptedRefreshPayload)
   } catch {
-    clearCookie(res, REFRESH_COOKIE_NAME)
+    clearCookie(res, REFRESH_COOKIE_NAME, {
+      path: '/',
+      sameSite: 'Lax',
+      secure: useSecureCookies,
+      httpOnly: true,
+    })
     return json(res, 409, {
       code: 'link_required',
       message: 'Refresh token invalido. Reconecta Google Drive.',
@@ -36,7 +43,12 @@ export default async function handler(req, res) {
   }
 
   if (!payload?.uid || payload.uid !== session.uid || !payload.refreshToken) {
-    clearCookie(res, REFRESH_COOKIE_NAME)
+    clearCookie(res, REFRESH_COOKIE_NAME, {
+      path: '/',
+      sameSite: 'Lax',
+      secure: useSecureCookies,
+      httpOnly: true,
+    })
     return json(res, 409, {
       code: 'link_required',
       message: 'Refresh token no coincide con la cuenta actual.',
@@ -46,7 +58,12 @@ export default async function handler(req, res) {
   const refreshed = await refreshDriveAccessToken(payload.refreshToken)
   if (!refreshed.ok || !refreshed.accessToken) {
     if (refreshed.error === 'invalid_grant') {
-      clearCookie(res, REFRESH_COOKIE_NAME)
+      clearCookie(res, REFRESH_COOKIE_NAME, {
+        path: '/',
+        sameSite: 'Lax',
+        secure: useSecureCookies,
+        httpOnly: true,
+      })
       return json(res, 409, {
         code: 'link_required',
         message: 'Google invalido el refresh token. Reconecta Drive.',

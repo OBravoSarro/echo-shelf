@@ -1,6 +1,6 @@
 import { decryptJson, encryptJson } from '../../_lib/crypto.js'
 import { exchangeAuthorizationCode } from '../../_lib/google-oauth.js'
-import { clearCookie, setCookie } from '../../_lib/http.js'
+import { clearCookie, setCookie, shouldUseSecureCookies } from '../../_lib/http.js'
 
 const REFRESH_COOKIE_NAME = 'es_drive_rt'
 const REFRESH_COOKIE_TTL_SECONDS = 60 * 60 * 24 * 180
@@ -33,6 +33,7 @@ export default async function handler(req, res) {
   }
 
   const baseUrl = getBaseUrl(req)
+  const useSecureCookies = shouldUseSecureCookies(req)
   const code = typeof req.query.code === 'string' ? req.query.code : undefined
   const stateToken = typeof req.query.state === 'string' ? req.query.state : undefined
   const oauthError = typeof req.query.error === 'string' ? req.query.error : undefined
@@ -62,7 +63,12 @@ export default async function handler(req, res) {
 
   const tokenResponse = await exchangeAuthorizationCode(code)
   if (!tokenResponse.ok || !tokenResponse.refreshToken) {
-    clearCookie(res, REFRESH_COOKIE_NAME)
+    clearCookie(res, REFRESH_COOKIE_NAME, {
+      path: '/',
+      sameSite: 'Lax',
+      secure: useSecureCookies,
+      httpOnly: true,
+    })
     redirect(res, `${baseUrl}${withStatus('/settings', 'error', tokenResponse.error ?? 'missing_refresh_token')}`)
     return
   }
@@ -77,7 +83,7 @@ export default async function handler(req, res) {
     path: '/',
     maxAge: REFRESH_COOKIE_TTL_SECONDS,
     sameSite: 'Lax',
-    secure: true,
+    secure: useSecureCookies,
     httpOnly: true,
   })
 

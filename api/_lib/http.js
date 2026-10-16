@@ -40,6 +40,25 @@ export const clearCookie = (res, name, options = {}) => {
   })
 }
 
+export const shouldUseSecureCookies = (req) => {
+  const forced = process.env.COOKIE_SECURE?.trim().toLowerCase()
+  if (forced === 'true') return true
+  if (forced === 'false') return false
+
+  const forwardedProtoHeader = req.headers['x-forwarded-proto']
+  const forwardedProto = Array.isArray(forwardedProtoHeader)
+    ? forwardedProtoHeader[0]
+    : forwardedProtoHeader?.split(',')[0]
+  if (forwardedProto) {
+    return forwardedProto.trim() === 'https'
+  }
+
+  const hostHeader = req.headers.host
+  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader
+  if (!host) return true
+  return !/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host.trim())
+}
+
 export const json = (res, status, body) => {
   res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8').send(JSON.stringify(body))
 }

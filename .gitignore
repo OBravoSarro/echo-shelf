@@ -29,3 +29,8 @@ test-results
 *.njsproj
 *.sln
 *.sw?
+.opencode
+.vercel
+.playwright-mcp
+vercel-*.yml
+example-domain-accessibility.yml

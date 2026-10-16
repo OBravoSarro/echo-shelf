@@ -103,3 +103,28 @@ El repo incluye `firebase.json`, `firestore.rules` y `firestore.indexes.json` pa
   - `POST /api/oauth/google/refresh`
 - `vercel.json` mantiene fallback SPA sin romper `/api` gracias a `handle: filesystem`.
 - La PWA excluye `/api/*` del fallback de navegacion para no interceptar callbacks OAuth.
+
+## Desarrollo local con OAuth funcional
+
+- Para probar frontend + rutas `/api` en local usa `npm run dev:full` (arranca `vercel dev` en `http://localhost:3000`).
+- Variables backend necesarias en local:
+  - `GOOGLE_OAUTH_CLIENT_ID`
+  - `GOOGLE_OAUTH_CLIENT_SECRET`
+  - `GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/api/oauth/google/callback`
+  - `FIREBASE_WEB_API_KEY`
+  - `TOKEN_ENCRYPTION_KEY`
+  - `APP_BASE_URL=http://localhost:3000`
+- Variables frontend necesarias en local (Firebase web config):
+  - `VITE_FIREBASE_API_KEY`
+  - `VITE_FIREBASE_AUTH_DOMAIN`
+  - `VITE_FIREBASE_PROJECT_ID`
+  - `VITE_FIREBASE_STORAGE_BUCKET`
+  - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+  - `VITE_FIREBASE_APP_ID`
+  - `VITE_FIREBASE_MEASUREMENT_ID`
+  - `VITE_GOOGLE_OAUTH_CLIENT_ID`
+- En Google Cloud OAuth (cliente web) agrega tambien:
+  - Origen autorizado: `http://localhost:3000`
+  - Redirect URI autorizado: `http://localhost:3000/api/oauth/google/callback`
+- En Firebase Authentication > Dominios autorizados confirma `localhost`.
+- El backend ahora adapta la cookie OAuth a entorno local (HTTP) sin `Secure`; si quieres forzar comportamiento, usa `COOKIE_SECURE=true|false`.

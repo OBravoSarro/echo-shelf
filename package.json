@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "set -a; [ -f ./.env.local ] && . ./.env.local; set +a; npx vercel dev --listen 3000",
     "build": "tsc -b && vite build",
     "lint": "oxlint .",
     "test": "vitest run",
