@@ -102,3 +102,4 @@ El repo incluye `firebase.json`, `firestore.rules` y `firestore.indexes.json` pa
   - `GET /api/oauth/google/callback`
   - `POST /api/oauth/google/refresh`
 - `vercel.json` mantiene fallback SPA sin romper `/api` gracias a `handle: filesystem`.
+- La PWA excluye `/api/*` del fallback de navegacion para no interceptar callbacks OAuth.
