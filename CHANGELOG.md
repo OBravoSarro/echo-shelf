@@ -15,6 +15,19 @@ Politica actual de versiones (pre-1.0):
 ### Added
 - Base inicial del proyecto `echo-shelf` con Vite + React + TypeScript.
 - Bloque de version en Ajustes con version actual, ultima version disponible y verificacion manual.
+- Rediseno visual inspirado en Apple: tipografia de sistema (SF Pro), materiales glass con blur/saturacion, fondo aurora con parallax y grano.
+- Primitivas de animacion reutilizables: `TiltCard` (tilt 3D + reflejo especular), `Reveal`, `Parallax`, `AmbientBackground`.
+- Componentes UI: `LargeTitle` colapsable con scroll, `SegmentedControl` con pildora animada, `Sheet` modal estilo iOS, `EqualizerBars`.
+- Reproductor con fondo ambient de la portada, portada que se encoge en pausa (estilo Apple Music) y morph play/pause.
+
+### Changed
+- Tab bar movil flotante que se oculta al hacer scroll hacia abajo; sidebar con indicador animado compartido.
+- Biblioteca, Descargas y Ajustes con listas agrupadas tipo iOS y apariciones al entrar en viewport.
+- Modales de metadatos y selector de carpeta migrados a `Sheet` (portal a `body`).
+- Todos los efectos respetan `prefers-reduced-motion`; el tilt 3D solo se activa con puntero fino.
+
+### Fixed
+- El mini player sticky de la biblioteca no aparecia en carga en frio: `useInView` se suscribia con el ref aun vacio.
 
 ### Technical
 - Inyeccion de version de app en build (`__APP_VERSION__`) y endpoint estatico `public/version.json` para chequeo de updates.
