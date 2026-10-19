@@ -4,11 +4,14 @@
 
 :root {
   color-scheme: dark;
-  font-family: 'Sora', 'Manrope', 'Avenir Next', sans-serif;
-  background: #060910;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-feature-settings: 'ss01', 'cv11';
+  letter-spacing: -0.011em;
+  background: #000;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -17,15 +20,25 @@ body,
   min-height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+  overscroll-behavior-y: none;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  background: #060910;
+  background: #000;
 }
 
 input,
-button {
+button,
+textarea {
   font: inherit;
+}
+
+::selection {
+  background: rgba(123, 99, 255, 0.45);
 }
 
 .no-scrollbar {
@@ -36,7 +49,123 @@ button {
   display: none;
 }
 
+@layer components {
+  /* Material "vibrancy" estilo Apple: blur + saturación + borde interior de luz */
+  .glass {
+    @apply border border-white/[0.08] bg-white/[0.05] shadow-glass;
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+  }
+
+  .glass-strong {
+    @apply border border-white/10 bg-[rgba(28,28,30,0.72)] shadow-glass;
+    -webkit-backdrop-filter: blur(40px) saturate(190%);
+    backdrop-filter: blur(40px) saturate(190%);
+  }
+
+  /* Tipografía display: tracking negativo como en apple.com */
+  .text-display {
+    @apply font-semibold tracking-[-0.035em];
+  }
+
+  .text-eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50;
+  }
+
+  /* Texto con degradado metálico */
+  .text-gradient {
+    background: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.62) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .text-gradient-accent {
+    background: linear-gradient(100deg, #a99bff 0%, #f48fd4 45%, #7cd3ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Botones */
+  .btn-pill {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition duration-300 ease-apple active:scale-[0.97];
+  }
+
+  .btn-primary {
+    @apply btn-pill bg-white text-black hover:bg-white/90;
+  }
+
+  .btn-secondary {
+    @apply btn-pill border border-white/10 bg-white/[0.08] text-white hover:bg-white/[0.14];
+  }
+
+  .btn-accent {
+    @apply btn-pill bg-gradient-to-r from-accent-violet to-accent-magenta text-white shadow-[0_8px_24px_-8px_rgba(240,61,175,0.6)] hover:brightness-110;
+  }
+
+  /* Inputs estilo iOS */
+  .field {
+    @apply w-full rounded-2xl border border-white/[0.08] bg-white/[0.06] px-4 py-3 text-sm text-white outline-none transition duration-300 placeholder:text-white/35 focus:border-white/20 focus:bg-white/[0.09] focus:ring-4 focus:ring-accent-violet/20;
+  }
+
+  /* Listas agrupadas tipo "inset grouped" de iOS */
+  .grouped {
+    @apply overflow-hidden rounded-[1.375rem] border border-white/[0.06] bg-surface-800/60;
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  .grouped-row {
+    @apply relative flex items-center gap-3 px-4 py-3.5;
+  }
+
+  .grouped-row + .grouped-row::before {
+    content: '';
+    @apply pointer-events-none absolute left-4 right-0 top-0 h-px bg-white/[0.07];
+  }
+
+  /* Ruido de grano sutil para dar textura a los fondos */
+  .noise::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .skeleton {
+    @apply animate-shimmer rounded-xl;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.05) 75%);
+    background-size: 200% 100%;
+  }
+
+  /* Range input custom (scrubber estilo Apple Music) */
+  .scrubber {
+    @apply relative h-1.5 w-full cursor-pointer overflow-hidden rounded-full bg-white/15 transition-[height] duration-300 ease-apple-out;
+  }
+
+  .scrubber:hover,
+  .scrubber:focus-within {
+    @apply h-2.5;
+  }
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.perspective {
+  perspective: 1200px;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {

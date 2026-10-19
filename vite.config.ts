@@ -20,8 +20,8 @@ export default defineConfig({
         name: 'EchoShelf',
         short_name: 'EchoShelf',
         description: 'Biblioteca premium de audiolibros en Google Drive, offline-first.',
-        theme_color: '#060910',
-        background_color: '#060910',
+        theme_color: '#000000',
+        background_color: '#000000',
         display: 'standalone',
         start_url: '/',
         icons: [

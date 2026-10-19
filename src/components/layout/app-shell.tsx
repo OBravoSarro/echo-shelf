@@ -1,7 +1,8 @@
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion, useMotionValueEvent, useReducedMotion, useScroll } from 'framer-motion'
 import { Download, LibraryBig, Settings } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { AmbientBackground } from '../motion/ambient-background'
 import { useAuthStore } from '../../features/auth/auth-store'
 import { useDownloadStore } from '../../features/downloads/download-store'
 import { useLibraryStore } from '../../features/library/library-store'
@@ -88,69 +89,121 @@ export const AppShell = () => {
   }, [authConnected, authUserId, startCloudSync, stopCloudSync])
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    // 'instant' para no heredar el `scroll-behavior: smooth` global al cambiar de ruta
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [location.pathname])
 
+  // Tab bar que se esconde al hacer scroll hacia abajo y reaparece al subir (patrón iOS/Safari)
+  const { scrollY } = useScroll()
+  const [tabBarHidden, setTabBarHidden] = useState(false)
+  useMotionValueEvent(scrollY, 'change', (current) => {
+    const previous = scrollY.getPrevious() ?? 0
+    const delta = current - previous
+    if (current < 80) {
+      setTabBarHidden(false)
+    } else if (delta > 6) {
+      setTabBarHidden(true)
+    } else if (delta < -6) {
+      setTabBarHidden(false)
+    }
+  })
+
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-bg-950 text-slate-100">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(123,99,255,0.22),transparent_34%),radial-gradient(circle_at_88%_12%,rgba(240,61,175,0.2),transparent_30%)]" />
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1440px]">
-        <aside className="hidden w-64 border-r border-white/10 bg-white/5 p-6 backdrop-blur-xl lg:block">
-          <Link to="/" className="flex items-center gap-3 text-lg font-semibold tracking-wide">
-            <span className="grid size-10 place-items-center rounded-2xl border border-white/15 bg-black/25 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
-              <img src="/favicon.svg" alt="EchoShelf" className="size-9 rounded-xl" />
-            </span>
-            EchoShelf
-          </Link>
-          <nav className="mt-12 space-y-3">
-            {navItems.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-2xl px-4 py-3 transition ${isActive ? 'bg-white/14 text-white' : 'text-slate-300 hover:bg-white/8'}`
-                }
+    <div className="relative min-h-screen overflow-x-clip bg-bg-950 text-label-primary">
+      <AmbientBackground />
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1440px]">
+        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col p-5 lg:flex">
+          <div className="glass flex h-full flex-col rounded-[1.75rem] p-4">
+            <Link to="/" className="group flex items-center gap-3 px-2 pt-1 text-[17px] font-semibold tracking-tight">
+              <motion.span
+                whileHover={reduceMotion ? undefined : { rotate: -8, scale: 1.08 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                className="grid size-10 place-items-center rounded-2xl border border-white/10 bg-black/40 shadow-[0_8px_20px_rgba(0,0,0,0.45)]"
               >
-                <Icon className="size-5" /> {label}
-              </NavLink>
-            ))}
-          </nav>
+                <img src="/favicon.svg" alt="EchoShelf" className="size-9 rounded-xl" />
+              </motion.span>
+              EchoShelf
+            </Link>
+            <nav className="mt-10 space-y-1">
+              {navItems.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  className={({ isActive }) =>
+                    `relative z-0 flex items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-medium transition-colors duration-300 ${isActive ? 'text-white' : 'text-white/55 hover:text-white'}`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <motion.span
+                          layoutId={reduceMotion ? undefined : 'sidebar-indicator'}
+                          className="absolute inset-0 -z-10 rounded-2xl bg-white/[0.1] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+                          transition={{ type: 'spring', stiffness: 420, damping: 36 }}
+                        />
+                      )}
+                      <Icon className="size-[18px]" strokeWidth={isActive ? 2.4 : 2} /> {label}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+            <p className="mt-auto px-2 text-[11px] text-white/30">Hecho para escuchar.</p>
+          </div>
         </aside>
-        <main className="w-full flex-1 px-4 pb-28 pt-[calc(env(safe-area-inset-top)+0.8rem)] sm:px-6 lg:px-10 lg:pb-8">
-          <Outlet />
+        <main className="w-full min-w-0 flex-1 px-5 pb-36 pt-[calc(env(safe-area-inset-top)+0.8rem)] sm:px-8 lg:px-12 lg:pb-12">
+          {/* Transición de entrada por ruta. Solo opacity/transform: al terminar framer deja
+              `transform: none`, así no queda un containing block que rompa `position: fixed`. */}
+          <motion.div
+            key={location.pathname}
+            initial={reduceMotion ? false : { opacity: 0, y: 18, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <Outlet />
+          </motion.div>
         </main>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-bg-900/85 px-4 pb-[calc(env(safe-area-inset-bottom)+0.6rem)] pt-2 backdrop-blur-xl lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-3 gap-3">
+      <motion.nav
+        initial={false}
+        animate={tabBarHidden && !reduceMotion ? { y: 120, opacity: 0 } : { y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+        className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-50 px-5 lg:hidden"
+      >
+        <div className="glass-strong mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-full p-1.5">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
+              end={to === '/'}
               className={({ isActive }) =>
-                `relative flex flex-col items-center justify-center rounded-xl py-2 text-xs ${isActive ? 'text-white' : 'text-slate-400'}`
+                `relative z-0 flex flex-col items-center justify-center rounded-full py-2 text-[10px] font-medium transition-colors duration-300 ${isActive ? 'text-white' : 'text-white/50'}`
               }
             >
               {({ isActive }) => (
                 <>
-                  {isActive && !reduceMotion && (
+                  {isActive && (
                     <motion.div
-                      layoutId="nav-indicator"
-                      className="absolute inset-0 rounded-xl bg-white/12"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      layoutId={reduceMotion ? undefined : 'nav-indicator'}
+                      className="absolute inset-0 -z-10 rounded-full bg-white/[0.14] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                     />
                   )}
-                  {isActive && reduceMotion && (
-                    <div className="absolute inset-0 rounded-xl bg-white/12" />
-                  )}
-                  <Icon className="relative mb-1 size-5" />
-                  <span className="relative">{label}</span>
+                  <motion.span
+                    animate={isActive && !reduceMotion ? { y: -1, scale: 1.08 } : { y: 0, scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+                  >
+                    <Icon className="mb-0.5 size-5" strokeWidth={isActive ? 2.4 : 2} />
+                  </motion.span>
+                  <span>{label}</span>
                 </>
               )}
             </NavLink>
           ))}
         </div>
-      </nav>
+      </motion.nav>
     </div>
   )
 }
