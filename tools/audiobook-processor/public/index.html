@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EchoShelf · Procesador de audiolibros</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎧</text></svg>" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Procesador de audiolibros</h1>
+        <p class="muted">Divide por capítulos y mejora la voz. Herramienta local, nada sale de tu equipo.</p>
+      </div>
+      <div id="tool-status" class="pill">Comprobando ffmpeg…</div>
+    </header>
+
+    <div id="ffmpeg-missing" class="banner error" hidden>
+      <strong>No se encuentra ffmpeg/ffprobe.</strong>
+      Instálalo con <code>brew install ffmpeg</code> y recarga la página.
+    </div>
+
+    <main class="layout">
+      <aside class="panel sidebar">
+        <label id="dropzone" class="dropzone">
+          <input id="file-input" type="file" accept=".m4b,.m4a,.mp4,.mp3,.aac,.ogg,.opus,.flac,.wav" hidden />
+          <span class="dropzone-title">Arrastra aquí tu .m4b</span>
+          <span class="muted small">o haz clic para elegirlo</span>
+          <div id="upload-progress" class="bar" hidden><div></div></div>
+        </label>
+
+        <div class="section-head">
+          <h2>Ficheros en input</h2>
+          <button id="open-input" class="ghost small" type="button">Abrir carpeta</button>
+        </div>
+        <ul id="file-list" class="file-list"></ul>
+        <p id="file-list-empty" class="muted small">Todavía no hay ficheros. Arrastra uno o cópialo en la carpeta input.</p>
+
+        <div class="section-head">
+          <h2>Ya procesados</h2>
+        </div>
+        <ul id="output-list" class="file-list compact"></ul>
+      </aside>
+
+      <section id="empty-state" class="panel empty">
+        <p>Selecciona un fichero de la lista para ver sus capítulos.</p>
+      </section>
+
+      <section id="editor" class="editor" hidden>
+        <div class="panel book">
+          <img id="cover" class="cover" alt="" hidden />
+          <div id="cover-placeholder" class="cover placeholder">Sin portada</div>
+          <div class="book-fields">
+            <div class="grid-2">
+              <label>Título<input id="meta-title" type="text" /></label>
+              <label>Autor<input id="meta-author" type="text" /></label>
+              <label>Narrador<input id="meta-narrator" type="text" /></label>
+              <label>Carpeta de salida<input id="folder-name" type="text" /></label>
+            </div>
+            <p id="folder-warning" class="muted small warn" hidden>
+              Esa carpeta ya existe en output: se reemplazará al terminar.
+            </p>
+            <dl id="book-stats" class="stats"></dl>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="section-head">
+            <h2>Capítulos <span id="chapter-count" class="muted"></span></h2>
+            <div class="row">
+              <button id="select-all" class="ghost small" type="button">Todos</button>
+              <button id="select-none" class="ghost small" type="button">Ninguno</button>
+            </div>
+          </div>
+          <div id="no-chapters" class="banner" hidden>
+            Este fichero no trae capítulos dentro. Puedes dividirlo en partes iguales:
+            <span class="row">
+              cada <input id="split-minutes" type="number" min="1" value="30" class="tiny" /> minutos
+              <button id="apply-split" class="small" type="button">Dividir</button>
+            </span>
+          </div>
+          <div class="table-wrap">
+            <table class="chapters">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>#</th>
+                  <th>Título</th>
+                  <th>Inicio</th>
+                  <th>Duración</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="chapter-rows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Audio</h2>
+          <label class="check">
+            <input id="enhance" type="checkbox" checked />
+            <span>
+              <strong>Mejorar la voz</strong>
+              <span class="muted small block">
+                Recodifica a AAC aplicando filtros para que la voz se entienda mejor. Si lo desactivas, solo se corta:
+                es instantáneo y no pierde calidad.
+              </span>
+            </span>
+          </label>
+
+          <div id="enhance-options" class="enhance-options">
+            <div id="presets" class="presets"></div>
+            <label class="inline">
+              Calidad
+              <select id="bitrate">
+                <option value="64">64 kbps (voz, ficheros pequeños)</option>
+                <option value="96" selected>96 kbps (recomendado)</option>
+                <option value="128">128 kbps</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="ab">
+            <h3>Compara antes de procesar</h3>
+            <p class="muted small">Escucha 30 segundos del mismo punto en original y con la mejora elegida.</p>
+            <div class="row wrap">
+              <label class="inline">
+                Desde
+                <select id="preview-chapter"></select>
+              </label>
+              <label class="inline">+ <input id="preview-offset" type="number" min="0" value="60" class="tiny" /> s</label>
+              <button id="play-original" class="ghost" type="button">▶ Original</button>
+              <button id="play-enhanced" type="button">▶ Mejorado</button>
+              <span id="preview-status" class="muted small"></span>
+            </div>
+            <audio id="player" controls preload="none"></audio>
+          </div>
+        </div>
+
+        <div class="panel summary">
+          <div>
+            <h2>Resultado</h2>
+            <p id="summary-text" class="muted"></p>
+          </div>
+          <button id="process" class="primary" type="button">Procesar</button>
+        </div>
+
+        <div id="job" class="panel" hidden>
+          <div class="section-head">
+            <h2 id="job-title">Procesando…</h2>
+            <div class="row">
+              <button id="cancel-job" class="ghost small danger" type="button">Cancelar</button>
+              <button id="open-output" class="small" type="button" hidden>Abrir en Finder</button>
+            </div>
+          </div>
+          <div id="job-overall" class="bar big"><div></div></div>
+          <p id="job-eta" class="muted small"></p>
+          <ul id="job-chapters" class="job-chapters"></ul>
+          <details>
+            <summary>Registro</summary>
+            <pre id="job-log"></pre>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -16,7 +16,9 @@
     "firebase:use": "firebase use --add",
     "firebase:deploy": "firebase deploy --only firestore",
     "firebase:deploy:firestore": "firebase deploy --only firestore",
-    "prepare": "husky"
+    "prepare": "husky",
+    "audiobooks": "node --experimental-strip-types --disable-warning=ExperimentalWarning tools/audiobook-processor/server.ts",
+    "audiobooks:typecheck": "tsc -p tools/audiobook-processor"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

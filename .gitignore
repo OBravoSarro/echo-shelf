@@ -34,3 +34,6 @@ test-results
 .playwright-mcp
 vercel-*.yml
 example-domain-accessibility.yml
+
+# Audiobook processor working files (audio is large and copyrighted)
+tools/audiobook-processor/workspace/
