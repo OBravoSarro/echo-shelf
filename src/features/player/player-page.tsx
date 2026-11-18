@@ -3,7 +3,6 @@ import { AlertCircle, CheckCircle2, ChevronLeft, Circle, Download, Gauge, HardDr
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Reveal } from '../../components/motion/reveal'
 import { TiltCard } from '../../components/motion/tilt-card'
 import { EqualizerBars } from '../../components/ui/equalizer-bars'
 import { ProgressRing } from '../../components/ui/progress-ring'
@@ -241,12 +240,12 @@ export const PlayerPage = () => {
           </button>
         </motion.div>
 
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16">
           {/* Columna principal: portada + info + transporte */}
           <div className="lg:sticky lg:top-8 lg:self-start">
             {/* Portada: parallax de scroll (capa externa) + escala por play/pause (capa media) + tilt 3D */}
             <motion.div
-              className="relative mx-auto mb-10 w-full max-w-[380px]"
+              className="relative mx-auto mb-6 w-full max-w-[380px] sm:mb-10"
               style={reduceMotion ? undefined : { y: coverY, scale: coverScale, transformOrigin: 'center top' }}
             >
               <motion.div
@@ -359,7 +358,7 @@ export const PlayerPage = () => {
             </div>
 
             {/* Velocidad */}
-            <div className="mt-8 flex flex-col items-center gap-3 lg:items-start">
+            <div className="mt-6 flex flex-col items-center gap-3 sm:mt-8 lg:items-start">
               <p className="text-eyebrow inline-flex items-center gap-1.5">
                 <Gauge className="size-3.5" /> Velocidad
               </p>
@@ -376,8 +375,14 @@ export const PlayerPage = () => {
           </div>
 
           {/* Capítulos */}
-          <Reveal className="min-w-0">
-            <div className="mb-4 flex items-end justify-between gap-2">
+          <div className="min-w-0">
+            <motion.div
+              initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 'some' }}
+              transition={{ duration: 0.6, ease: EASE_OUT }}
+              className="mb-4 flex items-end justify-between gap-2"
+            >
               <div>
                 <p className="text-eyebrow mb-1">{tracks.length} pistas</p>
                 <h2 className="text-display text-2xl">Capitulos</h2>
@@ -393,12 +398,15 @@ export const PlayerPage = () => {
                   <Download className="size-3.5" /> Descargar todo
                 </button>
               )}
-            </div>
+            </motion.div>
             <motion.div
               className="grouped"
+              // Se anima en cuanto asoma el borde superior de la lista (no un % de su
+              // altura, que con muchos capitulos obligaba a hacer mucho scroll).
               initial="hidden"
-              animate="visible"
-              variants={reduceMotion ? undefined : { hidden: {}, visible: { transition: { staggerChildren: 0.03, delayChildren: 0.2 } } }}
+              whileInView="visible"
+              viewport={{ once: true, amount: 0, margin: '0px 0px -40px 0px' }}
+              variants={reduceMotion ? undefined : { hidden: {}, visible: {} }}
             >
               {tracks.map((track, index) => {
                 const trackDuration = resolveTrackDurationSeconds({
@@ -429,7 +437,16 @@ export const PlayerPage = () => {
                 return (
                   <motion.div
                     key={track.id}
-                    variants={reduceMotion ? undefined : { hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0, transition: { duration: 0.5, ease: EASE_OUT } } }}
+                    custom={index}
+                    // Escalonado con tope: en libros con muchos capitulos no se eterniza
+                    variants={
+                      reduceMotion
+                        ? undefined
+                        : {
+                            hidden: { opacity: 0, x: -12 },
+                            visible: (i: number) => ({ opacity: 1, x: 0, transition: { duration: 0.5, ease: EASE_OUT, delay: 0.05 + Math.min(i, 16) * 0.03 } }),
+                          }
+                    }
                     className={`grouped-row text-sm transition-colors duration-300 ${isCurrent ? 'bg-white/[0.1]' : 'hover:bg-white/[0.05]'}`}
                   >
                     {/* Barra de progreso del capítulo como fondo sutil */}
@@ -573,7 +590,7 @@ export const PlayerPage = () => {
                 <p className="text-[15px] leading-relaxed text-white/60">{book.description}</p>
               </div>
             )}
-          </Reveal>
+          </div>
         </div>
       </section>
 

@@ -9,13 +9,13 @@ import {
   type AnimationPlaybackControls,
   type MotionValue,
 } from 'framer-motion'
-import { ChevronLeft, ChevronRight, LoaderCircle, Pause, Play } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Audiobook } from '../../domain/audiobook'
 import { BookCover } from '../../components/ui/book-cover'
 import { EqualizerBars } from '../../components/ui/equalizer-bars'
 import { ProgressRing } from '../../components/ui/progress-ring'
-import { formatHoursRatio } from '../../lib/format'
+import { formatDurationCompact, formatHoursRatio } from '../../lib/format'
 import { usePlayerStore } from '../player/player-store'
 import { useBookProgressGetter } from './use-book-progress'
 import { useResolvedCover } from './use-resolved-cover'
@@ -339,6 +339,7 @@ const AmbientGlow = ({ book, size }: { book?: Audiobook; size: number }) => {
 
 // ─── Ficha del libro activo ───────────────────────────────────────────────────
 
+/** Misma informacion que la vista Cards, centrada bajo el carrusel. */
 const CoverFlowDetails = ({
   book,
   index,
@@ -358,77 +359,84 @@ const CoverFlowDetails = ({
   const getProgress = useBookProgressGetter()
   const activeBookId = usePlayerStore((state) => state.activeBookId)
   const playing = usePlayerStore((state) => state.playing)
-  const pending = usePlayerStore((state) => state.pending)
-  const loadBook = usePlayerStore((state) => state.loadBook)
-  const playPause = usePlayerStore((state) => state.playPause)
-  const { percent, listenedSeconds, progress } = getProgress(book.id)
-  const isActive = activeBookId === book.id
-  const isPlaying = isActive && playing
-  const loading = isActive && pending
-
-  const handlePlay = async () => {
-    if (isActive) {
-      await playPause()
-      return
-    }
-    await loadBook(book.id, progress?.trackId, true)
-  }
+  const { percent, listenedSeconds } = getProgress(book.id)
+  const isPlaying = activeBookId === book.id && playing
 
   return (
-    <div className="flex flex-col items-center gap-4 text-center">
-      <div className="relative min-h-[4.5rem] w-full max-w-xl">
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.button
-            key={book.id}
-            type="button"
-            onClick={onOpen}
-            initial={reduceMotion ? false : { opacity: 0, y: 10, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            exit={reduceMotion ? undefined : { opacity: 0, y: -8, filter: 'blur(6px)' }}
-            transition={{ duration: 0.4, ease: EASE_OUT }}
-            className="w-full space-y-1 px-4"
-          >
-            <p className="text-eyebrow inline-flex items-center gap-2">
-              {isPlaying && <EqualizerBars active className="text-accent-cyan" />}
-              {isPlaying ? 'Reproduciendo' : book.author}
-            </p>
-            <h4 className="text-display line-clamp-2 text-2xl leading-tight sm:text-[1.75rem]">{book.title}</h4>
-          </motion.button>
-        </AnimatePresence>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <RoundButton onClick={onPrev} disabled={index <= 0} label="Portada anterior">
-          <ChevronLeft className="size-5" />
-        </RoundButton>
-        <div className="glass flex items-center gap-2.5 rounded-full py-1 pl-1 pr-1">
-          <ProgressRing percent={percent} size={34} strokeWidth={3} label={`Porcentaje leido de ${book.title}`} />
-          <span className="text-xs tabular-nums text-white/65">{formatHoursRatio(listenedSeconds, book.totalDurationSeconds)}</span>
-          <motion.button
-            type="button"
-            onClick={() => void handlePlay()}
-            disabled={loading}
-            whileTap={reduceMotion ? undefined : { scale: 0.88 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-            aria-label={isPlaying ? 'Pausar' : `Reproducir ${book.title}`}
-            className="ml-1 inline-flex size-9 items-center justify-center rounded-full bg-white text-black disabled:opacity-60"
-          >
-            {loading ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : isPlaying ? (
-              <Pause className="size-4" fill="currentColor" />
-            ) : (
-              <Play className="size-4 translate-x-[1px]" fill="currentColor" />
+    <div className="flex flex-col items-center gap-5 text-center">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={book.id}
+          initial={reduceMotion ? false : { opacity: 0, y: 10, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          exit={reduceMotion ? undefined : { opacity: 0, y: -6, filter: 'blur(6px)', transition: { duration: 0.15 } }}
+          transition={{ duration: 0.4, ease: EASE_OUT }}
+          className="flex w-full max-w-xl flex-col items-center gap-3 px-2"
+        >
+          <button type="button" onClick={onOpen} className="space-y-1.5">
+            {isPlaying && (
+              <p className="text-eyebrow inline-flex items-center gap-2 text-accent-cyan">
+                <EqualizerBars active /> Reproduciendo
+              </p>
             )}
-          </motion.button>
-        </div>
+            <h4 className="text-display line-clamp-2 text-2xl leading-tight sm:text-[1.75rem]">{book.title}</h4>
+            <p className="text-sm text-white/55">
+              {book.author} · Narrado por {book.narrator}
+            </p>
+          </button>
+          <ExpandableDescription description={book.description} />
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <ProgressRing percent={percent} size={34} strokeWidth={3} label={`Porcentaje leido de ${book.title}`} />
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.05] px-3 py-1.5 text-xs text-white/65">
+              {formatDurationCompact(book.totalDurationSeconds)}
+            </span>
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.05] px-3 py-1.5 text-xs tabular-nums text-white/65">
+              {formatHoursRatio(listenedSeconds, book.totalDurationSeconds)}
+            </span>
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.05] px-3 py-1.5 text-xs tabular-nums text-white/65">
+              {book.trackCount} pistas
+            </span>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+
+      <div className="flex items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.04] p-1">
+        <RoundButton onClick={onPrev} disabled={index <= 0} label="Portada anterior">
+          <ChevronLeft className="size-4" />
+        </RoundButton>
+        <span className="min-w-[3.5rem] text-[11px] tabular-nums text-white/45">
+          {index + 1} / {total}
+        </span>
         <RoundButton onClick={onNext} disabled={index >= total - 1} label="Portada siguiente">
-          <ChevronRight className="size-5" />
+          <ChevronRight className="size-4" />
         </RoundButton>
       </div>
-      <p className="text-[11px] tabular-nums text-white/35">
-        {index + 1} / {total}
-      </p>
+    </div>
+  )
+}
+
+const ExpandableDescription = ({ description }: { description?: string }) => {
+  const [expanded, setExpanded] = useState(false)
+  if (!description?.trim()) {
+    return <p className="text-sm text-white/35">Sin descripcion disponible.</p>
+  }
+  const canExpand = description.length > 180
+  return (
+    <div className="max-w-lg">
+      <motion.p
+        key={expanded ? 'expanded' : 'collapsed'}
+        initial={{ opacity: 0.4 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.35 }}
+        className={`text-sm leading-relaxed text-white/50 ${!expanded && canExpand ? 'line-clamp-3' : ''}`}
+      >
+        {description}
+      </motion.p>
+      {canExpand && (
+        <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-1.5 text-xs font-semibold text-accent-cyan transition hover:text-white">
+          {expanded ? 'Leer menos' : 'Leer mas'}
+        </button>
+      )}
     </div>
   )
 }
@@ -444,7 +452,7 @@ const RoundButton = ({ onClick, disabled, label, children }: { onClick: () => vo
       whileTap={reduceMotion || disabled ? undefined : { scale: 0.86 }}
       whileHover={reduceMotion || disabled ? undefined : { scale: 1.06 }}
       transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-      className="inline-flex size-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.08] text-white backdrop-blur-md transition-[background-color,opacity] hover:bg-white/[0.16] disabled:opacity-30"
+      className="inline-flex size-8 items-center justify-center rounded-full text-white/70 transition-[background-color,color,opacity] hover:bg-white/[0.1] hover:text-white disabled:opacity-25"
     >
       {children}
     </motion.button>

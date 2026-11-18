@@ -16,17 +16,20 @@ export const PlaybackStatus = () => {
   const text = isError ? (loadStatus.message ?? 'No se pudo cargar el capitulo') : loadStatus.phase === 'idle' ? loadStatus.message : undefined
 
   return (
-    <div className="mt-4 min-h-[2.25rem]" aria-live="polite">
+    // Sin hueco reservado: el aviso entra desplegando su altura para no dejar
+    // un espacio vacio entre los controles y los capitulos.
+    <div aria-live="polite">
       <AnimatePresence initial={false}>
         {text && (
           <motion.div
             key={isError ? 'error' : 'message'}
-            initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
-            className={`flex items-center justify-center gap-2 text-[13px] lg:justify-start ${isError ? 'text-rose-200' : 'text-white/55'}`}
+            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={reduceMotion ? undefined : { opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
           >
+            <div className={`flex items-center justify-center gap-2 pt-4 text-[13px] lg:justify-start ${isError ? 'text-rose-200' : 'text-white/55'}`}>
             <AlertCircle className="size-4 shrink-0" />
             <span className="min-w-0">{text}</span>
             {isError && (
@@ -34,6 +37,7 @@ export const PlaybackStatus = () => {
                 <RefreshCw className="size-3.5" /> Reintentar
               </button>
             )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
