@@ -28,6 +28,8 @@ const driveListSchema = z.object({
   nextPageToken: z.string().optional(),
 })
 
+const COMPACT_EVERY_BYTES = 4 * 1024 * 1024
+
 const DRIVE_BASE = 'https://www.googleapis.com/drive/v3'
 
 const parseDriveError = async (response: Response): Promise<string> => {
@@ -43,6 +45,30 @@ const parseDriveError = async (response: Response): Promise<string> => {
     return `${response.status}`
   }
   return `${response.status}`
+}
+
+export class DriveHttpError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'DriveHttpError'
+    this.status = status
+  }
+}
+
+export interface DownloadProgress {
+  loaded: number
+  total?: number
+}
+
+export interface DownloadOptions {
+  signal?: AbortSignal
+  onProgress?: (progress: DownloadProgress) => void
+  /** Tamano esperado cuando el servidor no envia Content-Length. */
+  expectedSize?: number
+  /** MIME del blob resultante (Drive suele responder application/octet-stream). */
+  mimeType?: string
 }
 
 const withAuth = async (url: URL, accessToken: string): Promise<Response> => {
@@ -117,17 +143,51 @@ export const driveApi = {
     return all
   },
 
-  async download(accessToken: string, fileId: string, signal?: AbortSignal): Promise<Blob> {
+  async download(accessToken: string, fileId: string, options: AbortSignal | DownloadOptions = {}): Promise<Blob> {
+    const opts: DownloadOptions = options instanceof AbortSignal ? { signal: options } : options
     const url = new URL(`${DRIVE_BASE}/files/${fileId}`)
     url.searchParams.set('alt', 'media')
+    url.searchParams.set('supportsAllDrives', 'true')
     const response = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
-      signal,
+      signal: opts.signal,
     })
     if (!response.ok) {
       const detail = await parseDriveError(response)
-      throw new Error(`Drive download failed: ${detail}`)
+      throw new DriveHttpError(`Drive download failed: ${detail}`, response.status)
     }
-    return response.blob()
+    const type = opts.mimeType ?? response.headers.get('content-type') ?? undefined
+    if (!opts.onProgress || !response.body) {
+      const blob = await response.blob()
+      return opts.mimeType && blob.type !== opts.mimeType ? new Blob([blob], { type }) : blob
+    }
+    const headerLength = Number(response.headers.get('content-length'))
+    const total = Number.isFinite(headerLength) && headerLength > 0 ? headerLength : opts.expectedSize
+    const reader = response.body.getReader()
+    // Compactamos los trozos en Blobs cada pocos MB: el motor puede sacar esos
+    // datos del heap de JS, lo que reduce los picos de memoria en iPhone con
+    // capitulos de 50-100 MB (Safari mata la pestana si se pasa).
+    const parts: Blob[] = []
+    let chunks: Uint8Array[] = []
+    let chunkBytes = 0
+    let loaded = 0
+    opts.onProgress({ loaded, total })
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        chunks.push(value)
+        chunkBytes += value.byteLength
+        loaded += value.byteLength
+        if (chunkBytes >= COMPACT_EVERY_BYTES) {
+          parts.push(new Blob(chunks as BlobPart[]))
+          chunks = []
+          chunkBytes = 0
+        }
+        opts.onProgress({ loaded, total })
+      }
+    }
+    if (chunks.length > 0) parts.push(new Blob(chunks as BlobPart[]))
+    return new Blob(parts, { type })
   },
 }

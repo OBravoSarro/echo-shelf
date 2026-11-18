@@ -43,9 +43,11 @@ import { UserAvatar } from '../../components/ui/user-avatar'
 import { calculateListenedSeconds } from '../../lib/book-progress'
 import { hasFirebaseAuthConfig } from '../../lib/env'
 import { calculateBookProgressPercent } from '../../lib/book-progress'
-import { formatDurationCompact, formatHoursRatio, formatSeconds } from '../../lib/format'
+import { formatDurationCompact, formatHoursRatio } from '../../lib/format'
 import { useAuthStore } from '../auth/auth-store'
 import { usePlayerStore } from '../player/player-store'
+import { Scrubber } from '../../components/ui/scrubber'
+import { usePlaybackStatusLabel } from '../player/playback-status-label'
 import { useLibraryStore } from './library-store'
 import { useResolvedCover } from './use-resolved-cover'
 
@@ -527,7 +529,6 @@ const ContinueHero = ({
   const coverY = useTransform(scrollYProgress, [0, 1], [36, -36])
   const disabled = pending && isActive
   const isPlaying = isActive && playing
-  const progressPct = Math.min(100, (positionSeconds / totalSeconds) * 100)
 
   return (
     <article
@@ -583,27 +584,8 @@ const ContinueHero = ({
             </div>
           </div>
 
-          <div className="space-y-1.5" onClick={(event) => event.stopPropagation()}>
-            <div className="scrubber">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-white transition-[width] duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-              <input
-                type="range"
-                min={0}
-                max={totalSeconds}
-                step={1}
-                value={Math.min(positionSeconds, totalSeconds)}
-                onChange={(event) => onSeek(Number(event.target.value))}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                aria-label={`Progreso de ${book.title}`}
-              />
-            </div>
-            <div className="flex items-center justify-between text-[11px] tabular-nums text-white/45">
-              <span>{formatSeconds(positionSeconds)}</span>
-              <span>-{formatSeconds(Math.max(0, totalSeconds - positionSeconds))}</span>
-            </div>
+          <div onClick={(event) => event.stopPropagation()}>
+            <Scrubber value={positionSeconds} max={totalSeconds} onSeek={onSeek} label={`Progreso de ${book.title}`} timeClassName="text-[11px] text-white/45" />
           </div>
 
           <div className="flex items-center justify-center gap-2 sm:justify-start sm:gap-3" onClick={(event) => event.stopPropagation()}>
@@ -916,6 +898,7 @@ const StickyMiniPlayer = ({
 }) => {
   const isActive = activeBookId === book.id
   const disabled = pending && isActive
+  const statusLabel = usePlaybackStatusLabel()
   const positionSeconds = isActive ? position : (progress?.positionSeconds ?? 0)
   const totalSeconds = Math.max(1, isActive && duration > 0 ? duration : book.totalDurationSeconds)
   const progressPct = Math.min(100, (positionSeconds / totalSeconds) * 100)
@@ -954,7 +937,9 @@ const StickyMiniPlayer = ({
               {isActive && playing && <EqualizerBars active className="text-accent-cyan" />}
               <span className="truncate">{book.title}</span>
             </p>
-            <p className="truncate text-[11px] text-white/50">{book.author}</p>
+            <p className={`truncate text-[11px] ${isActive && statusLabel ? 'text-accent-cyan' : 'text-white/50'}`}>
+              {isActive && statusLabel ? statusLabel : book.author}
+            </p>
           </div>
           <ProgressRing percent={percent} size={30} strokeWidth={2.5} label={`Progreso ${book.title}`} />
           <motion.button

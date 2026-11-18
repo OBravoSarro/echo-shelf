@@ -36,3 +36,9 @@ export const formatHoursRatio = (currentSeconds: number, totalSeconds: number): 
   const total = Number(totalHours.toFixed(1)).toString()
   return `${current}h/${total}h`
 }
+
+export const formatMegabytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB'
+  const mb = bytes / (1024 * 1024)
+  return `${mb >= 100 ? Math.round(mb) : mb.toFixed(1)} MB`
+}

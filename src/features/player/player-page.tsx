@@ -9,6 +9,8 @@ import { EqualizerBars } from '../../components/ui/equalizer-bars'
 import { ProgressRing } from '../../components/ui/progress-ring'
 import { SegmentedControl } from '../../components/ui/segmented-control'
 import { Sheet } from '../../components/ui/sheet'
+import { Scrubber } from '../../components/ui/scrubber'
+import { useFinePointer } from '../../components/motion/use-fine-pointer'
 import {
   calculateBookProgressPercent,
   calculateListenedSeconds,
@@ -21,12 +23,14 @@ import { useResolvedCover } from '../library/use-resolved-cover'
 import { useDownloadStore } from '../downloads/download-store'
 import { type EnrichedMetadataCandidate, searchBookMetadata } from '../metadata/book-enrichment'
 import { usePlayerStore } from './player-store'
+import { PlaybackStatus } from './playback-status'
 
 const SPEEDS = [0.9, 1, 1.15, 1.3, 1.5, 1.75, 2]
 const EASE_OUT = [0.16, 1, 0.3, 1] as const
 
 export const PlayerPage = () => {
   const reduceMotion = useReducedMotion()
+  const finePointer = useFinePointer()
   const navigate = useNavigate()
   const params = useParams()
   const bookId = params.bookId
@@ -45,7 +49,8 @@ export const PlayerPage = () => {
   const position = usePlayerStore((state) => state.position)
   const duration = usePlayerStore((state) => state.duration)
   const speed = usePlayerStore((state) => state.speed)
-  const error = usePlayerStore((state) => state.error)
+  const pending = usePlayerStore((state) => state.pending)
+  const loadStatus = usePlayerStore((state) => state.loadStatus)
   const loadBook = usePlayerStore((state) => state.loadBook)
   const playPause = usePlayerStore((state) => state.playPause)
   const seek = usePlayerStore((state) => state.seek)
@@ -137,8 +142,6 @@ export const PlayerPage = () => {
     readTrackIds,
     totalDurationSeconds: book.totalDurationSeconds,
   })
-  const safeDuration = Math.max(duration, 1)
-  const clampedPosition = Math.min(position, duration)
   const isPlayingThis = playing && activeBookId === bookId
 
   const saveMetadata = async () => {
@@ -176,9 +179,10 @@ export const PlayerPage = () => {
               transition={{ duration: 1.2 }}
             >
               <motion.div className="absolute inset-0" style={reduceMotion ? { scale: 1.5 } : { scale: ambientScale }}>
-                <div className={`absolute inset-0 ${reduceMotion ? '' : 'animate-[spin_90s_linear_infinite]'}`}>
+                {/* El giro continuo con blur a pantalla completa gasta GPU/bateria: en movil, nunca; en escritorio, solo sonando. */}
+                <div className={`absolute inset-0 ${!reduceMotion && finePointer && isPlayingThis ? 'animate-[spin_90s_linear_infinite]' : ''}`}>
                   {cover ? (
-                    <img src={cover} alt="" className="h-full w-full object-cover opacity-80 blur-[90px] saturate-[1.8]" />
+                    <img src={cover} alt="" className={`h-full w-full object-cover opacity-80 saturate-[1.8] ${finePointer ? 'blur-[90px]' : 'blur-[60px]'}`} />
                   ) : (
                     <div
                       className="h-full w-full opacity-80 blur-[80px]"
@@ -266,26 +270,8 @@ export const PlayerPage = () => {
             </motion.div>
 
             {/* Scrubber */}
-            <div className="mt-8 space-y-2">
-              <div className="scrubber">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-white"
-                  style={{ width: `${Math.min(100, (clampedPosition / safeDuration) * 100)}%` }}
-                />
-                <input
-                  type="range"
-                  min={0}
-                  max={safeDuration}
-                  value={clampedPosition}
-                  onChange={(e) => seek(Number(e.target.value))}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  aria-label="Progress"
-                />
-              </div>
-              <div className="flex justify-between text-xs tabular-nums text-white/50">
-                <span>{formatSeconds(position)}</span>
-                <span>-{formatSeconds(Math.max(0, duration - position))}</span>
-              </div>
+            <div className="mt-6">
+              <Scrubber value={position} max={duration} onSeek={seek} label="Progreso del capitulo" />
             </div>
 
             {/* Transporte */}
@@ -307,14 +293,20 @@ export const PlayerPage = () => {
               >
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.span
-                    key={playing ? 'pause' : 'play'}
+                    key={pending && activeBookId === bookId ? 'pending' : playing ? 'pause' : 'play'}
                     initial={reduceMotion ? false : { scale: 0.3, opacity: 0, rotate: -60 }}
                     animate={{ scale: 1, opacity: 1, rotate: 0 }}
                     exit={reduceMotion ? undefined : { scale: 0.3, opacity: 0, rotate: 60 }}
                     transition={{ type: 'spring', stiffness: 500, damping: 26 }}
                     className="inline-flex"
                   >
-                    {playing ? <Pause className="size-8" fill="currentColor" /> : <Play className="size-8 translate-x-[2px]" fill="currentColor" />}
+                    {pending && activeBookId === bookId ? (
+                      <LoaderCircle className="size-8 animate-spin" />
+                    ) : playing ? (
+                      <Pause className="size-8" fill="currentColor" />
+                    ) : (
+                      <Play className="size-8 translate-x-[2px]" fill="currentColor" />
+                    )}
                   </motion.span>
                 </AnimatePresence>
               </motion.button>
@@ -340,7 +332,7 @@ export const PlayerPage = () => {
               />
             </div>
 
-            {error && <p className="mt-4 text-center text-sm text-rose-200 lg:text-left">{error}</p>}
+            <PlaybackStatus fileSize={activeTrack?.fileSize} />
           </div>
 
           {/* Capítulos */}
@@ -383,6 +375,7 @@ export const PlayerPage = () => {
                 })
                 const isCurrent = track.id === currentTrackId
                 const isRead = readTrackIds.includes(track.id)
+                const isLoading = isCurrent && pending && loadStatus.trackId === track.id
                 return (
                   <motion.div
                     key={track.id}
@@ -398,7 +391,13 @@ export const PlayerPage = () => {
                       />
                     )}
                     <span className="relative grid w-6 shrink-0 place-items-center text-xs tabular-nums text-white/35">
-                      {isCurrent ? <EqualizerBars active={isPlayingThis} className="text-accent-cyan" /> : index + 1}
+                      {isLoading ? (
+                        <LoaderCircle className="size-3.5 animate-spin text-accent-cyan" />
+                      ) : isCurrent ? (
+                        <EqualizerBars active={isPlayingThis} className="text-accent-cyan" />
+                      ) : (
+                        index + 1
+                      )}
                     </span>
                     <button
                       type="button"
@@ -413,7 +412,7 @@ export const PlayerPage = () => {
                         onClick={() => {
                           void markTrackRead(bookId, track.id, !isRead)
                         }}
-                        className={`rounded-full p-1 transition ${isRead ? 'text-emerald-300 hover:text-emerald-200' : 'text-white/30 hover:text-white'}`}
+                        className={`rounded-full p-2 sm:p-1 transition ${isRead ? 'text-emerald-300 hover:text-emerald-200' : 'text-white/30 hover:text-white'}`}
                         aria-label={isRead ? 'Marcar capitulo como no leido' : 'Marcar capitulo como leido'}
                         title={isRead ? 'Marcado como leido' : 'Marcar como leido'}
                       >
@@ -432,7 +431,7 @@ export const PlayerPage = () => {
                                 onClick={() => {
                                   void removeTrackDownload(track.id)
                                 }}
-                                className="rounded-full p-1 text-white/40 transition hover:text-white"
+                                className="rounded-full p-2 sm:p-1 text-white/40 transition hover:text-white"
                                 aria-label="Eliminar descarga"
                               >
                                 <Trash2 className="size-3.5" />
@@ -462,7 +461,7 @@ export const PlayerPage = () => {
                               onClick={() => {
                                 void enqueueTrack(bookId, track.id)
                               }}
-                              className="inline-flex items-center gap-1 rounded-full p-1 text-rose-300 hover:text-rose-200"
+                              className="inline-flex items-center gap-1 rounded-full p-2 sm:p-1 text-rose-300 hover:text-rose-200"
                               aria-label="Reintentar descarga"
                             >
                               <AlertCircle className="size-3.5" />
@@ -476,7 +475,7 @@ export const PlayerPage = () => {
                             onClick={() => {
                               void enqueueTrack(bookId, track.id)
                             }}
-                            className="rounded-full p-1 text-white/40 transition hover:text-white"
+                            className="rounded-full p-2 sm:p-1 text-white/40 transition hover:text-white"
                             aria-label="Descargar capitulo"
                           >
                             <Download className="size-3.5" />

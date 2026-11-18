@@ -20,6 +20,19 @@ body,
   min-height: 100%;
 }
 
+/* Sin retardo de doble toque (zoom) en controles tactiles */
+button,
+a,
+input,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+/* Evita el menu de "guardar imagen" al mantener pulsada una portada en iOS */
+img {
+  -webkit-touch-callout: none;
+}
+
 html {
   scroll-behavior: smooth;
   overscroll-behavior-y: none;
