@@ -12,6 +12,19 @@ Politica actual de versiones (pre-1.0):
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-18
+
+### Added
+- Colecciones: nuevo apartado en el menu (barra lateral y tab bar) para agrupar audiolibros por saga, genero o como se quiera.
+- Pagina de colecciones con portada en mosaico (2x2 a partir de 4 libros) y capas apiladas, duracion total y progreso conjunto.
+- Detalle de coleccion con fondo ambient, boton "Continuar/Empezar" que retoma el ultimo libro sin terminar, renombrar, eliminar (con confirmacion), anadir/quitar libros y reordenarlos arrastrando.
+- En "Editar metadatos" se puede anadir el libro a colecciones existentes o crear nuevas al vuelo; las colecciones del libro aparecen como chips en el reproductor.
+- Al abrir un libro desde una coleccion, el boton de volver regresa a esa coleccion.
+
+### Technical
+- Tabla `collections` en IndexedDB (Dexie v2) y sincronizacion con Firestore en `users/{uid}/collections` (last-write-wins por coleccion, con tombstones para propagar borrados).
+- `BookCover`/`CoverArt` extraidos a `components/ui/book-cover.tsx` y hook `useBookProgressGetter` reutilizable.
+
 ## [0.2.1] - 2026-11-18
 
 ### Changed
