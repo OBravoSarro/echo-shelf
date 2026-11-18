@@ -1,8 +1,8 @@
 import { AnimatePresence, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
-import { AlertCircle, CheckCircle2, ChevronLeft, Circle, Download, Gauge, HardDriveDownload, LoaderCircle, Pause, Pencil, Play, RefreshCw, SkipBack, SkipForward, Trash2 } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { AlertCircle, CheckCircle2, ChevronLeft, Circle, Download, Gauge, HardDriveDownload, Layers, LoaderCircle, Pause, Pencil, Play, RefreshCw, SkipBack, SkipForward, Trash2 } from 'lucide-react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Reveal } from '../../components/motion/reveal'
 import { TiltCard } from '../../components/motion/tilt-card'
 import { EqualizerBars } from '../../components/ui/equalizer-bars'
@@ -18,6 +18,8 @@ import {
   resolveTrackDurationSeconds,
 } from '../../lib/book-progress'
 import { formatHoursRatio, formatSeconds } from '../../lib/format'
+import { CollectionPicker } from '../collections/collection-picker'
+import { useCollectionStore } from '../collections/collection-store'
 import { useLibraryStore } from '../library/library-store'
 import { useResolvedCover } from '../library/use-resolved-cover'
 import { useDownloadStore } from '../downloads/download-store'
@@ -33,8 +35,19 @@ export const PlayerPage = () => {
   const reduceMotion = useReducedMotion()
   const finePointer = useFinePointer()
   const navigate = useNavigate()
+  const location = useLocation()
   const params = useParams()
   const bookId = params.bookId
+  // Si venimos de una coleccion, el boton de volver regresa a ella
+  const backTarget = (location.state as { from?: string; fromLabel?: string } | null) ?? undefined
+  const backTo = backTarget?.from?.startsWith('/') ? backTarget.from : '/'
+  const backLabel = backTarget?.from?.startsWith('/') && backTarget.fromLabel ? backTarget.fromLabel : 'Biblioteca'
+  const collections = useCollectionStore((state) => state.collections)
+  const setBookMembership = useCollectionStore((state) => state.setBookMembership)
+  const bookCollections = useMemo(
+    () => (bookId ? collections.filter((item) => item.bookIds.includes(bookId)) : []),
+    [bookId, collections],
+  )
   const library = useLibraryStore()
   const updateBookMetadata = useLibraryStore((state) => state.updateBookMetadata)
   const readTrackIdsByBook = useLibraryStore((state) => state.readTrackIdsByBook)
@@ -83,6 +96,16 @@ export const PlayerPage = () => {
   const [suggestions, setSuggestions] = useState<EnrichedMetadataCandidate[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
   const [suggestionsError, setSuggestionsError] = useState<string | undefined>()
+  const [draftCollectionIds, setDraftCollectionIds] = useState<string[]>([])
+  const [draftNewCollections, setDraftNewCollections] = useState<string[]>([])
+
+  // Las colecciones se inicializan al abrir la hoja (no cuando cambia `book`, que se
+  // actualiza al aplicar una sugerencia y perderia la seleccion en curso).
+  const openEditor = () => {
+    setDraftCollectionIds(bookCollections.map((item) => item.id))
+    setDraftNewCollections([])
+    setEditing(true)
+  }
 
   useEffect(() => {
     if (!book) return
@@ -162,6 +185,7 @@ export const PlayerPage = () => {
       genres: genres.length > 0 ? genres : undefined,
       isbn: draftIsbn || undefined,
     })
+    await setBookMembership(book.id, draftCollectionIds, draftNewCollections)
     setEditing(false)
   }
 
@@ -209,10 +233,10 @@ export const PlayerPage = () => {
           transition={{ duration: 0.6, ease: EASE_OUT }}
           className="relative z-20 mb-6 flex items-center justify-between gap-2"
         >
-          <button type="button" onClick={() => navigate('/')} className="btn-pill glass pl-2.5 text-[13px] text-white/90">
-            <ChevronLeft className="size-4" /> Biblioteca
+          <button type="button" onClick={() => navigate(backTo)} className="btn-pill glass min-w-0 pl-2.5 text-[13px] text-white/90">
+            <ChevronLeft className="size-4 shrink-0" /> <span className="max-w-[160px] truncate">{backLabel}</span>
           </button>
-          <button type="button" onClick={() => setEditing(true)} className="btn-pill glass text-[13px] text-white/90">
+          <button type="button" onClick={openEditor} className="btn-pill glass shrink-0 text-[13px] text-white/90">
             <Pencil className="size-3.5" /> Editar metadatos
           </button>
         </motion.div>
@@ -262,6 +286,20 @@ export const PlayerPage = () => {
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
+              )}
+              {bookCollections.length > 0 && (
+                <div className="flex flex-wrap justify-center gap-1.5 pt-2 lg:justify-start">
+                  {bookCollections.map((item) => (
+                    <Link
+                      key={item.id}
+                      to={`/collections/${item.id}`}
+                      className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.07] px-3 py-1 text-xs text-white/75 backdrop-blur-md transition hover:bg-white/[0.14] hover:text-white"
+                    >
+                      <Layers className="size-3 shrink-0" />
+                      <span className="truncate">{item.name}</span>
+                    </Link>
+                  ))}
+                </div>
               )}
               <div className="flex justify-center pt-3 lg:justify-start">
                 <div className="glass inline-flex items-center gap-2.5 rounded-full py-1 pl-1 pr-3.5">
@@ -575,6 +613,14 @@ export const PlayerPage = () => {
             />
           </div>
           <input value={draftGenres} onChange={(event) => setDraftGenres(event.target.value)} className="field" placeholder="Generos (coma separados)" />
+
+          <CollectionPicker
+            collections={collections}
+            selectedIds={draftCollectionIds}
+            newNames={draftNewCollections}
+            onChangeSelected={setDraftCollectionIds}
+            onChangeNewNames={setDraftNewCollections}
+          />
 
           <div className="grouped mt-2 p-4">
             <div className="mb-3 flex items-center justify-between">

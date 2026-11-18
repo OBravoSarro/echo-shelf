@@ -56,3 +56,14 @@ export interface DownloadState {
   error?: string
   updatedAt: string
 }
+
+export interface BookCollection {
+  id: string
+  name: string
+  /** Orden manual de los libros dentro de la coleccion */
+  bookIds: string[]
+  createdAt: string
+  updatedAt: string
+  /** Tombstone: se conserva para propagar el borrado entre dispositivos */
+  deleted?: boolean
+}

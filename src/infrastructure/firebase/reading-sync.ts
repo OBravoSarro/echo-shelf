@@ -7,7 +7,7 @@ import {
   type FirestoreError,
   type Unsubscribe,
 } from 'firebase/firestore'
-import type { Audiobook, ListeningProgress } from '../../domain/audiobook'
+import type { Audiobook, BookCollection, ListeningProgress } from '../../domain/audiobook'
 import { firestoreDb } from './client'
 
 export interface CloudBookState {
@@ -29,6 +29,8 @@ const userBookStateDoc = (userId: string, bookId: string) => doc(firestoreDb!, '
 const userPreferencesDoc = (userId: string) => doc(firestoreDb!, 'users', userId, 'preferences', 'bookOrder')
 const userBookMetadataCollection = (userId: string) => collection(firestoreDb!, 'users', userId, 'bookMetadata')
 const userBookMetadataDoc = (userId: string, bookId: string) => doc(firestoreDb!, 'users', userId, 'bookMetadata', bookId)
+const userCollectionsCollection = (userId: string) => collection(firestoreDb!, 'users', userId, 'collections')
+const userCollectionDoc = (userId: string, collectionId: string) => doc(firestoreDb!, 'users', userId, 'collections', collectionId)
 
 export const canUseReadingSync = (): boolean => Boolean(firestoreDb)
 
@@ -151,4 +153,51 @@ export const fetchBookOrder = async (userId: string): Promise<string[] | null> =
   const data = snap.data() as { order?: unknown }
   if (!Array.isArray(data.order)) return null
   return data.order.filter((id): id is string => typeof id === 'string')
+}
+
+// ─── Collections ──────────────────────────────────────────────────────────────
+
+export const subscribeCloudCollections = (
+  userId: string,
+  onData: (collections: BookCollection[]) => void,
+  onError: (error: FirestoreError) => void,
+): Unsubscribe => {
+  if (!firestoreDb) {
+    return () => {}
+  }
+  return onSnapshot(
+    userCollectionsCollection(userId),
+    (snapshot) => {
+      const items = snapshot.docs.flatMap((entry): BookCollection[] => {
+        const data = entry.data() as Partial<BookCollection> & { updatedAtMs?: number }
+        if (typeof data.name !== 'string') return []
+        const updatedAtMs = typeof data.updatedAtMs === 'number' ? data.updatedAtMs : 0
+        return [
+          {
+            id: entry.id,
+            name: data.name,
+            bookIds: Array.isArray(data.bookIds) ? data.bookIds.filter((item): item is string => typeof item === 'string') : [],
+            createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date(updatedAtMs).toISOString(),
+            updatedAt: new Date(updatedAtMs).toISOString(),
+            deleted: data.deleted === true,
+          },
+        ]
+      })
+      onData(items)
+    },
+    onError,
+  )
+}
+
+export const pushCloudCollection = async (userId: string, item: BookCollection): Promise<void> => {
+  if (!firestoreDb) return
+  const updatedAtMs = Date.parse(item.updatedAt)
+  // Firestore no admite `undefined`: todos los campos van siempre definidos
+  await setDoc(userCollectionDoc(userId, item.id), {
+    name: item.name,
+    bookIds: item.bookIds,
+    createdAt: item.createdAt,
+    deleted: item.deleted === true,
+    updatedAtMs: Number.isFinite(updatedAtMs) ? updatedAtMs : Date.now(),
+  })
 }

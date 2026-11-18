@@ -1,15 +1,17 @@
 import { motion, useMotionValueEvent, useReducedMotion, useScroll } from 'framer-motion'
-import { Download, LibraryBig, Settings } from 'lucide-react'
+import { Download, Layers, LibraryBig, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { AmbientBackground } from '../motion/ambient-background'
 import { useAuthStore } from '../../features/auth/auth-store'
+import { useCollectionStore } from '../../features/collections/collection-store'
 import { useDownloadStore } from '../../features/downloads/download-store'
 import { useLibraryStore } from '../../features/library/library-store'
 import { usePlayerStore } from '../../features/player/player-store'
 
 const navItems = [
   { to: '/', label: 'Biblioteca', icon: LibraryBig },
+  { to: '/collections', label: 'Colecciones', icon: Layers },
   { to: '/downloads', label: 'Descargas', icon: Download },
   { to: '/settings', label: 'Ajustes', icon: Settings },
 ]
@@ -19,6 +21,9 @@ export const AppShell = () => {
   const bootstrapAuth = useAuthStore((state) => state.bootstrap)
   const bootstrapLibrary = useLibraryStore((state) => state.bootstrap)
   const bootstrapDownloads = useDownloadStore((state) => state.bootstrap)
+  const bootstrapCollections = useCollectionStore((state) => state.bootstrap)
+  const startCollectionSync = useCollectionStore((state) => state.startCloudSync)
+  const stopCollectionSync = useCollectionStore((state) => state.stopCloudSync)
   const source = useLibraryStore((state) => state.source)
   const driveRootId = useLibraryStore((state) => state.driveRootId)
   const startCloudSync = useLibraryStore((state) => state.startCloudSync)
@@ -38,8 +43,9 @@ export const AppShell = () => {
     void bootstrapAuth()
     void bootstrapLibrary()
     void bootstrapDownloads()
+    void bootstrapCollections()
     initPlayer()
-  }, [bootstrapAuth, bootstrapDownloads, bootstrapLibrary, initPlayer])
+  }, [bootstrapAuth, bootstrapCollections, bootstrapDownloads, bootstrapLibrary, initPlayer])
 
   useEffect(() => {
     if (!authConnected || !accessToken || !driveRootId || source !== 'drive' || libraryLoading) {
@@ -80,13 +86,16 @@ export const AppShell = () => {
   useEffect(() => {
     if (!authConnected || !authUserId) {
       stopCloudSync()
+      stopCollectionSync()
       return
     }
     void startCloudSync(authUserId)
+    startCollectionSync(authUserId)
     return () => {
       stopCloudSync()
+      stopCollectionSync()
     }
-  }, [authConnected, authUserId, startCloudSync, stopCloudSync])
+  }, [authConnected, authUserId, startCloudSync, startCollectionSync, stopCloudSync, stopCollectionSync])
 
   useEffect(() => {
     // 'instant' para no heredar el `scroll-behavior: smooth` global al cambiar de ruta
@@ -172,7 +181,7 @@ export const AppShell = () => {
         transition={{ type: 'spring', stiffness: 380, damping: 34 }}
         className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-50 px-5 lg:hidden"
       >
-        <div className="glass-strong mx-auto grid max-w-sm grid-cols-3 gap-1 rounded-full p-1.5">
+        <div className="glass-strong mx-auto grid max-w-md grid-cols-4 gap-1 rounded-full p-1.5">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}

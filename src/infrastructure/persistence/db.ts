@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Audiobook, AudioTrack, DownloadState, ListeningProgress } from '../../domain/audiobook'
+import type { Audiobook, AudioTrack, BookCollection, DownloadState, ListeningProgress } from '../../domain/audiobook'
 
 export interface AuthState {
   id: 'google'
@@ -35,6 +35,7 @@ class EchoShelfDb extends Dexie {
   auth!: EntityTable<AuthState, 'id'>
   files!: EntityTable<FileEntry, 'id'>
   settings!: EntityTable<SettingValue, 'key'>
+  collections!: EntityTable<BookCollection, 'id'>
 
   constructor() {
     super('echo-shelf-db')
@@ -46,6 +47,16 @@ class EchoShelfDb extends Dexie {
       auth: '&id, updatedAt',
       files: '&id, updatedAt',
       settings: '&key, updatedAt',
+    })
+    this.version(2).stores({
+      books: '&id, source, updatedAt, title',
+      tracks: '&id, bookId, index, format',
+      progress: '&bookId, trackId, updatedAt',
+      downloads: '&id, bookId, trackId, status, updatedAt',
+      auth: '&id, updatedAt',
+      files: '&id, updatedAt',
+      settings: '&key, updatedAt',
+      collections: '&id, updatedAt',
     })
   }
 }
