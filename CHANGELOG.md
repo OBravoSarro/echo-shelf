@@ -12,6 +12,15 @@ Politica actual de versiones (pre-1.0):
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-18
+
+### Changed
+- La vista 3D muestra bajo la portada la misma informacion que las cards (titulo, autor y narrador, descripcion con "Leer mas", progreso, duracion y pistas) en lugar de controles de reproduccion; la navegacion queda en un selector discreto "‹ 3 / 9 ›".
+
+### Fixed
+- Detalle del libro: menos espacio entre los controles del reproductor y los capitulos (el aviso de estado ya no reserva hueco cuando esta vacio y se reducen margenes en movil).
+- Detalle del libro: la lista de capitulos se anima en cuanto asoma, en vez de esperar a que se viera un porcentaje de toda la lista (con muchos capitulos habia que hacer mucho scroll); el escalonado tiene tope para libros largos.
+
 ## [0.4.0] - 2026-11-18
 
 ### Added
