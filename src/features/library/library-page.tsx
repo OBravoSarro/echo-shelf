@@ -2,6 +2,7 @@ import {
   Cloud,
   CloudOff,
   FolderSearch,
+  GalleryHorizontal,
   GripVertical,
   LayoutGrid,
   LayoutList,
@@ -12,6 +13,7 @@ import {
   Search,
   SkipBack,
   SkipForward,
+  X,
 } from 'lucide-react'
 import { AnimatePresence, motion, useInView, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import { type ReactNode, useRef, useMemo, useState, useEffect } from 'react'
@@ -50,13 +52,28 @@ import { Scrubber } from '../../components/ui/scrubber'
 import { usePlaybackStatusLabel } from '../player/playback-status-label'
 import { useLibraryStore } from './library-store'
 import { useResolvedCover } from './use-resolved-cover'
+import { CoverFlow } from './cover-flow'
+import { CollectionFilter } from '../collections/collection-filter'
+import { useCollectionStore } from '../collections/collection-store'
 import { BookCover, CoverArt } from '../../components/ui/book-cover'
+
+type ViewMode = 'cards' | 'grid' | 'list' | 'flow'
+const COLLECTION_FILTER_KEY = 'library-collection'
 
 export const LibraryPage = () => {
   const navigate = useNavigate()
   const reduceMotion = useReducedMotion()
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'cards' | 'grid' | 'list'>('cards')
+  const [viewMode, setViewMode] = useState<ViewMode>('cards')
+  const [collectionFilter, setCollectionFilter] = useState<string | undefined>(() => {
+    try {
+      return window.localStorage.getItem(COLLECTION_FILTER_KEY) ?? undefined
+    } catch {
+      return undefined
+    }
+  })
+  const collections = useCollectionStore((state) => state.collections)
+  const collectionsBootstrapped = useCollectionStore((state) => state.bootstrapped)
   const [expandedDescriptions, setExpandedDescriptions] = useState<Record<string, boolean>>({})
   // ref para detectar cuándo la sección "Continuar escuchando" sale del viewport
   // Callback ref + objeto memoizado: la sección se monta DESPUÉS de cargar los libros
@@ -73,7 +90,7 @@ export const LibraryPage = () => {
   }, [continueInView])
   useEffect(() => {
     const stored = window.localStorage.getItem('library-view')
-    if (stored === 'cards' || stored === 'grid' || stored === 'list') {
+    if (stored === 'cards' || stored === 'grid' || stored === 'list' || stored === 'flow') {
       setViewMode(stored)
     }
   }, [])
@@ -94,6 +111,7 @@ export const LibraryPage = () => {
   const seek = usePlayerStore((state) => state.seek)
   const skip = usePlayerStore((state) => state.skip)
   const reorderBooks = useLibraryStore((state) => state.reorderBooks)
+  const setCollectionBookIds = useCollectionStore((state) => state.setBookIds)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -102,6 +120,22 @@ export const LibraryPage = () => {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
+    // Filtrando por coleccion, el orden que se ve (y se arrastra) es el de la coleccion
+    if (activeCollection) {
+      const ids = books.map((b) => b.id)
+      const from = ids.indexOf(String(active.id))
+      const to = ids.indexOf(String(over.id))
+      if (from === -1 || to === -1) return
+      const moved = arrayMove(ids, from, to)
+      // Los libros ocultos por la busqueda mantienen su hueco; los visibles se recolocan
+      const queue = [...moved]
+      const visible = new Set(ids)
+      void setCollectionBookIds(
+        activeCollection.id,
+        activeCollection.bookIds.map((id) => (visible.has(id) ? (queue.shift() ?? id) : id)),
+      )
+      return
+    }
     const oldIndex = library.books.findIndex((b) => b.id === active.id)
     const newIndex = library.books.findIndex((b) => b.id === over.id)
     if (oldIndex === -1 || newIndex === -1) return
@@ -109,12 +143,35 @@ export const LibraryPage = () => {
     void reorderBooks(reordered.map((b) => b.id))
   }
 
+  const booksById = useMemo(() => new Map(library.books.map((book) => [book.id, book])), [library.books])
+  // Si la coleccion filtrada se borra (aqui o en otro dispositivo), se vuelve a "Todos"
+  const activeCollection = collections.find((item) => item.id === collectionFilter)
+  const effectiveCollectionFilter = collectionsBootstrapped ? activeCollection?.id : collectionFilter
+
+  const handleCollectionFilterChange = (collectionId: string | undefined) => {
+    setCollectionFilter(collectionId)
+    try {
+      if (collectionId) window.localStorage.setItem(COLLECTION_FILTER_KEY, collectionId)
+      else window.localStorage.removeItem(COLLECTION_FILTER_KEY)
+    } catch {
+      // almacenamiento no disponible: el filtro vive solo en memoria
+    }
+  }
+
   const books = useMemo(() => {
-    const source = library.books
+    let source = library.books
+    if (activeCollection) {
+      // Respeta el orden manual de la coleccion
+      source = activeCollection.bookIds.flatMap((id) => {
+        const book = booksById.get(id)
+        return book ? [book] : []
+      })
+    }
     if (!search.trim()) return source
     const lower = search.toLowerCase()
     return source.filter((book) => [book.title, book.author, book.narrator].join(' ').toLowerCase().includes(lower))
-  }, [library.books, search])
+  }, [activeCollection, booksById, library.books, search])
+  const isFiltering = Boolean(effectiveCollectionFilter) || Boolean(search.trim())
 
   const getEffectiveProgress = (bookId: string) => {
     const savedProgress = library.progressByBook[bookId]
@@ -135,7 +192,8 @@ export const LibraryPage = () => {
     }
   }
 
-  const continueListening = books
+  // "Continuar escuchando" es global: no depende de la busqueda ni del filtro
+  const continueListening = library.books
     .map((book) => ({ book, progress: getEffectiveProgress(book.id) }))
     .filter((item) => Boolean(item.progress))
     .sort((a, b) => {
@@ -144,7 +202,7 @@ export const LibraryPage = () => {
       return tb.localeCompare(ta)
     })
     .slice(0, 1)
-  const showSkeleton = library.loading && books.length === 0
+  const showSkeleton = library.loading && library.books.length === 0
 
   const toggleDescription = (bookId: string) => {
     setExpandedDescriptions((current) => ({
@@ -228,7 +286,7 @@ export const LibraryPage = () => {
   const stickyItem =
     continueListening.find((item) => item.book.id === activeBookId) ?? continueListening[0]
 
-  const handleViewChange = (mode: 'cards' | 'grid' | 'list') => {
+  const handleViewChange = (mode: ViewMode) => {
     setViewMode(mode)
     window.localStorage.setItem('library-view', mode)
   }
@@ -290,18 +348,6 @@ export const LibraryPage = () => {
           }
         />
 
-        {/* Search */}
-        <Reveal delay={0.1} y={16}>
-          <label className="glass group flex items-center gap-3 rounded-full px-5 py-3.5 transition duration-300 focus-within:border-white/20 focus-within:bg-white/[0.08] focus-within:ring-4 focus-within:ring-accent-violet/20">
-            <Search className="size-4 text-white/40 transition group-focus-within:text-white/80" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Busca por titulo, autor o narrador"
-              className="w-full bg-transparent text-[15px] text-white outline-none placeholder:text-white/35"
-            />
-          </label>
-        </Reveal>
       </div>
 
       {/* Warnings */}
@@ -341,7 +387,7 @@ export const LibraryPage = () => {
         </article>
       )}
 
-      {!showSkeleton && books.length === 0 && (
+      {!showSkeleton && library.books.length === 0 && (
         <Reveal>
           <div className="rounded-[2rem] border border-dashed border-white/15 bg-white/[0.03] p-10 text-center text-[15px] text-white/55">
             No hay audiolibros en la biblioteca. Conecta Drive y sincroniza tu carpeta desde Ajustes.
@@ -383,26 +429,82 @@ export const LibraryPage = () => {
       )}
 
       {/* Tu biblioteca */}
-      {books.length > 0 && (
+      {library.books.length > 0 && (
         <section className="space-y-5">
-          <Reveal>
+          <Reveal className="relative z-20">
             <SectionHeader
-              eyebrow={`${books.length} ${books.length === 1 ? 'titulo' : 'titulos'}`}
+              eyebrow={`${books.length} ${books.length === 1 ? 'titulo' : 'titulos'}${isFiltering ? ` de ${library.books.length}` : ''}`}
               title="Tu biblioteca"
               trailing={
-                <SegmentedControl
-                  layoutId="library-view-mode"
-                  value={viewMode}
-                  onChange={handleViewChange}
-                  options={[
-                    { value: 'cards', label: <><LayoutList className="size-3.5" /> Cards</> },
-                    { value: 'grid', label: <><LayoutGrid className="size-3.5" /> Grid</> },
-                    { value: 'list', label: <><Rows className="size-3.5" /> Lista</> },
-                  ]}
-                />
+                collections.length > 0 ? (
+                  <CollectionFilter
+                    collections={collections}
+                    booksById={booksById}
+                    value={effectiveCollectionFilter}
+                    onChange={handleCollectionFilterChange}
+                  />
+                ) : undefined
               }
             />
           </Reveal>
+          <Reveal delay={0.05} y={16}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label className="glass group flex min-w-0 flex-1 items-center gap-3 rounded-full px-5 py-3 transition duration-300 focus-within:border-white/20 focus-within:bg-white/[0.08] focus-within:ring-4 focus-within:ring-accent-violet/20">
+                <Search className="size-4 shrink-0 text-white/40 transition group-focus-within:text-white/80" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Busca por titulo, autor o narrador"
+                  className="w-full bg-transparent text-[15px] text-white outline-none placeholder:text-white/35"
+                />
+                <AnimatePresence initial={false}>
+                  {search && (
+                    <motion.button
+                      type="button"
+                      onClick={() => setSearch('')}
+                      initial={reduceMotion ? false : { opacity: 0, scale: 0.6 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={reduceMotion ? undefined : { opacity: 0, scale: 0.6 }}
+                      className="grid size-5 shrink-0 place-items-center rounded-full bg-white/20 text-white/80 hover:bg-white/30"
+                      aria-label="Borrar busqueda"
+                    >
+                      <X className="size-3" />
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+              </label>
+              <SegmentedControl
+                layoutId="library-view-mode"
+                value={viewMode}
+                onChange={handleViewChange}
+                className="self-start sm:self-auto"
+                options={[
+                  { value: 'cards', label: <><LayoutList className="size-3.5" /> Cards</> },
+                  { value: 'grid', label: <><LayoutGrid className="size-3.5" /> Grid</> },
+                  { value: 'list', label: <><Rows className="size-3.5" /> Lista</> },
+                  { value: 'flow', label: <><GalleryHorizontal className="size-3.5" /> 3D</> },
+                ]}
+              />
+            </div>
+          </Reveal>
+          {books.length === 0 && (
+            <Reveal>
+              <div className="flex flex-col items-center gap-3 rounded-[2rem] border border-dashed border-white/15 bg-white/[0.03] p-10 text-center text-[15px] text-white/55">
+                {activeCollection && !search.trim() ? `La coleccion "${activeCollection.name}" esta vacia.` : 'Ningun libro coincide con tu busqueda.'}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('')
+                    handleCollectionFilterChange(undefined)
+                  }}
+                  className="btn-secondary text-xs"
+                >
+                  Ver todos los libros
+                </button>
+              </div>
+            </Reveal>
+          )}
+          {books.length > 0 && (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={books.map((b) => b.id)} strategy={verticalListSortingStrategy}>
               <AnimatePresence mode="wait" initial={false}>
@@ -446,6 +548,13 @@ export const LibraryPage = () => {
                       ))}
                     </div>
                   )}
+                  {viewMode === 'flow' && (
+                    <CoverFlow
+                      books={books}
+                      initialBookId={activeBookId ?? continueListening[0]?.book.id}
+                      onOpen={(book) => navigate(`/player/${book.id}`)}
+                    />
+                  )}
                   {viewMode === 'list' && (
                     <div className="grouped">
                       {books.map((book) => (
@@ -464,6 +573,7 @@ export const LibraryPage = () => {
               </AnimatePresence>
             </SortableContext>
           </DndContext>
+          )}
         </section>
       )}
 
