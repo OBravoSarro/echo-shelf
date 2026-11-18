@@ -12,6 +12,18 @@ Politica actual de versiones (pre-1.0):
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
+### Added
+- Vista "3D" de la biblioteca: carrusel de portadas en perspectiva con reflejo, brillo ambiental de la portada activa, arrastre con inercia, rueda/trackpad horizontal y flechas de teclado; tocar la portada central abre el libro y el boton de play lo reproduce.
+- Filtro por coleccion en "Tu biblioteca": pildora con la mini portada y el nombre de la coleccion, popover con todas las colecciones y boton para quitar el filtro. Se recuerda entre sesiones.
+
+### Changed
+- El buscador baja a la seccion "Tu biblioteca", junto al selector de vista; incluye boton para borrar la busqueda.
+- Con un filtro de coleccion activo, los libros aparecen en el orden de la coleccion y arrastrar reordena la coleccion.
+- "Continuar escuchando" ya no se oculta al buscar o filtrar.
+- Mensaje especifico cuando un filtro o busqueda no devuelve libros, con acceso directo a ver todos.
+
 ## [0.3.0] - 2026-11-18
 
 ### Added
