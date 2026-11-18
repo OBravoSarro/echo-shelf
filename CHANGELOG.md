@@ -12,6 +12,11 @@ Politica actual de versiones (pre-1.0):
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-18
+
+### Changed
+- El progreso de carga de un capitulo no descargado se muestra como barra y porcentaje en la propia fila del capitulo; bajo los controles solo aparecen errores o avisos accionables.
+
 ## [0.2.0] - 2026-11-18
 
 ### Added
