@@ -5,22 +5,20 @@ export const percentOf = (status: LoadStatus): number | undefined => {
   return Math.min(100, Math.round((status.loaded / status.total) * 100))
 }
 
-/** Texto corto del estado de carga, para sitios estrechos (mini player). */
+/** Texto corto del estado de carga para el mini player (sin detalles tecnicos). */
 export const describeLoadStatus = (status: LoadStatus, buffering: boolean): string | undefined => {
   switch (status.phase) {
-    case 'local':
-      return 'Abriendo desde el dispositivo…'
     case 'downloading': {
       const percent = percentOf(status)
-      return percent === undefined ? 'Descargando de Drive…' : `Descargando de Drive · ${percent}%`
+      return percent === undefined ? 'Cargando capitulo…' : `Cargando capitulo · ${percent}%`
     }
     case 'preparing':
-      return 'Preparando audio…'
+      return 'Cargando capitulo…'
     case 'error':
       return status.message ?? 'No se pudo cargar el capitulo'
     default:
-      if (buffering) return 'Cargando audio…'
-      return status.message
+      if (buffering) return 'Cargando…'
+      return status.phase === 'idle' ? status.message : undefined
   }
 }
 

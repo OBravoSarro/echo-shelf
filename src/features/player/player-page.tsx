@@ -24,6 +24,7 @@ import { useDownloadStore } from '../downloads/download-store'
 import { type EnrichedMetadataCandidate, searchBookMetadata } from '../metadata/book-enrichment'
 import { usePlayerStore } from './player-store'
 import { PlaybackStatus } from './playback-status'
+import { percentOf } from './playback-status-label'
 
 const SPEEDS = [0.9, 1, 1.15, 1.3, 1.5, 1.75, 2]
 const EASE_OUT = [0.16, 1, 0.3, 1] as const
@@ -51,6 +52,7 @@ export const PlayerPage = () => {
   const speed = usePlayerStore((state) => state.speed)
   const pending = usePlayerStore((state) => state.pending)
   const loadStatus = usePlayerStore((state) => state.loadStatus)
+  const cancelLoad = usePlayerStore((state) => state.cancelLoad)
   const loadBook = usePlayerStore((state) => state.loadBook)
   const playPause = usePlayerStore((state) => state.playPause)
   const seek = usePlayerStore((state) => state.seek)
@@ -332,7 +334,7 @@ export const PlayerPage = () => {
               />
             </div>
 
-            <PlaybackStatus fileSize={activeTrack?.fileSize} />
+            <PlaybackStatus />
           </div>
 
           {/* Capítulos */}
@@ -376,6 +378,16 @@ export const PlayerPage = () => {
                 const isCurrent = track.id === currentTrackId
                 const isRead = readTrackIds.includes(track.id)
                 const isLoading = isCurrent && pending && loadStatus.trackId === track.id
+                const job = jobs.find((item) => item.trackId === track.id)
+                // Progreso de carga en la propia fila: al reproducir algo no descargado
+                // o mientras se descarga/precarga en segundo plano.
+                const fetchingForPlayback = isLoading && loadStatus.phase === 'downloading'
+                const fetchPercent = fetchingForPlayback
+                  ? percentOf(loadStatus)
+                  : job?.status === 'running'
+                    ? Math.round((job.progress || 0) * 100)
+                    : undefined
+                const showFetchBar = fetchingForPlayback || job?.status === 'running'
                 return (
                   <motion.div
                     key={track.id}
@@ -390,6 +402,23 @@ export const PlayerPage = () => {
                         style={{ width: `${trackProgress}%` }}
                       />
                     )}
+                    {/* Barra de carga del audio en el borde inferior de la fila */}
+                    <AnimatePresence>
+                      {showFetchBar && (
+                        <motion.span
+                          aria-hidden="true"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] overflow-hidden bg-white/[0.06]"
+                        >
+                          <span
+                            className={`absolute inset-y-0 left-0 bg-accent-cyan transition-[width] duration-300 ease-out ${fetchPercent === undefined ? 'w-1/4 animate-pulse' : ''}`}
+                            style={fetchPercent === undefined ? undefined : { width: `${Math.max(2, fetchPercent)}%` }}
+                          />
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
                     <span className="relative grid w-6 shrink-0 place-items-center text-xs tabular-nums text-white/35">
                       {isLoading ? (
                         <LoaderCircle className="size-3.5 animate-spin text-accent-cyan" />
@@ -421,7 +450,19 @@ export const PlayerPage = () => {
                       <span className="hidden w-8 text-right text-[10px] tabular-nums text-white/40 sm:inline">{Math.round(trackProgress)}%</span>
                       <span className="w-12 text-right text-xs tabular-nums text-white/50">{formatSeconds(trackDuration)}</span>
                       {(() => {
-                        const job = jobs.find((item) => item.trackId === track.id)
+                        if (fetchingForPlayback && !job) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={cancelLoad}
+                              className="inline-flex items-center gap-1 rounded-full p-2 text-accent-cyan sm:p-1"
+                              aria-label="Cancelar carga del capitulo"
+                            >
+                              <LoaderCircle className="size-3.5 animate-spin" />
+                              {fetchPercent !== undefined && <span className="text-[10px] tabular-nums">{fetchPercent}%</span>}
+                            </button>
+                          )
+                        }
                         if (downloadedTrackIds.includes(track.id)) {
                           return (
                             <>
