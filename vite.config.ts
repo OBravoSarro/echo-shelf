@@ -51,6 +51,15 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
+            // Caratulas para la pantalla de bloqueo / CarPlay: las escribe la app
+            // en Cache Storage (cover-source.ts) y aqui solo se sirven, sin red.
+            urlPattern: ({ url }) => url.pathname.startsWith('/covers/'),
+            handler: 'CacheOnly',
+            options: {
+              cacheName: 'book-covers',
+            },
+          },
+          {
             urlPattern: ({ request, url }) => request.method === 'GET' && /\/(assets|icons)\//.test(url.pathname),
             handler: 'StaleWhileRevalidate',
             options: {

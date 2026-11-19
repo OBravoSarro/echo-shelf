@@ -1,6 +1,7 @@
 import type { AudioTrack } from '../../domain/audiobook'
 
 type EngineListener = () => void
+type EngineErrorListener = (message: string) => void
 
 const describeMediaError = (error: MediaError | null): string => {
   switch (error?.code) {
@@ -58,9 +59,14 @@ export class AudioEngine {
   private currentIndex = 0
   private listeners = new Set<EngineListener>()
   private endedListeners = new Set<EngineListener>()
+  private errorListeners = new Set<EngineErrorListener>()
   private buffering = false
   private cancelPendingLoad?: () => void
   private unlocked = false
+  /** Invalida un desbloqueo en curso cuando llega una reproduccion o carga real. */
+  private unlockSeq = 0
+  /** Desbloqueo silenciado sobre audio real: no cuenta como "reproduciendo". */
+  private unlockingMuted = false
 
   constructor() {
     this.audio.preload = 'auto'
@@ -87,6 +93,14 @@ export class AudioEngine {
       if (this.audio.src.startsWith('data:')) return // silencio de desbloqueo
       this.endedListeners.forEach((cb) => cb())
     })
+    // Fallos fuera de una carga: tipico en iOS al reanudar tras una pausa larga
+    // en segundo plano, cuando el sistema ha soltado el blob del capitulo.
+    this.audio.addEventListener('error', () => {
+      if (this.cancelPendingLoad || this.audio.src.startsWith('data:')) return
+      this.setBuffering(false)
+      const message = describeMediaError(this.audio.error)
+      this.errorListeners.forEach((cb) => cb(message))
+    })
   }
 
   private notify = (): void => {
@@ -109,12 +123,18 @@ export class AudioEngine {
     return () => this.endedListeners.delete(listener)
   }
 
+  /** Error de reproduccion con un capitulo ya cargado (no durante `load`). */
+  onError(listener: EngineErrorListener): () => void {
+    this.errorListeners.add(listener)
+    return () => this.errorListeners.delete(listener)
+  }
+
   getState() {
     return {
       currentTrack: this.queue[this.currentIndex] as AudioTrack | undefined,
       currentIndex: this.currentIndex,
       queue: this.queue,
-      playing: !this.audio.paused,
+      playing: !this.audio.paused && !this.unlockingMuted,
       buffering: this.buffering,
       position: this.audio.currentTime,
       duration: Number.isFinite(this.audio.duration) ? this.audio.duration : 0,
@@ -134,23 +154,37 @@ export class AudioEngine {
       this.unlocked = true
       return
     }
+    const seq = ++this.unlockSeq
     if (this.hasSource()) {
-      // Hay audio real cargado: el play() del propio gesto ya desbloquea.
-      return
+      // Hay un capitulo cargado que aun no ha sonado: se "toca" silenciado. Si
+      // el gesto acaba en una descarga larga, el play posterior ya no se bloquea.
+      this.unlockingMuted = true
+      this.audio.muted = true
+    } else {
+      this.audio.src = buildSilentWav()
     }
-    this.audio.src = buildSilentWav()
     this.unlocked = true
     // WebKit levanta la restriccion en el momento de llamar a play() dentro
     // del gesto, aunque luego se interrumpa al cargar el capitulo (AbortError).
     void this.audio
       .play()
       ?.then(() => {
-        // Si en este tiempo se ha cargado un capitulo, no lo toques.
-        if (this.audio.src.startsWith('data:audio/wav')) this.audio.pause()
+        // Si entre tanto ha llegado un play/carga real, no lo toques.
+        if (seq === this.unlockSeq) this.audio.pause()
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'NotAllowedError') this.unlocked = false
       })
+      .finally(() => {
+        if (seq === this.unlockSeq) this.endUnlock()
+      })
+  }
+
+  private endUnlock(): void {
+    this.unlockSeq += 1
+    if (!this.unlockingMuted) return
+    this.unlockingMuted = false
+    this.audio.muted = false
   }
 
   canPlayType(mimeType: string): boolean {
@@ -161,7 +195,7 @@ export class AudioEngine {
     return this.audio.hasAttribute('src')
   }
 
-  /** Cambia la cola y el capitulo actual, descargando la fuente anterior. */
+  /** Cambia la cola y el capitulo actual. */
   setQueue(queue: AudioTrack[], startIndex = 0): void {
     this.queue = queue
     this.selectIndex(startIndex)
@@ -169,7 +203,12 @@ export class AudioEngine {
 
   selectIndex(index: number): void {
     this.currentIndex = Math.max(0, Math.min(index, this.queue.length - 1))
-    this.unload()
+    // Se pausa pero NO se descarga la fuente: un <audio> sin src en segundo
+    // plano hace que iOS suelte la sesion de audio (y con ella la pantalla de
+    // bloqueo / CarPlay) antes de que llegue el siguiente capitulo. La fuente
+    // anterior se sustituye directamente en `load`.
+    this.cancelPendingLoad?.()
+    this.audio.pause()
     this.notify()
   }
 
@@ -194,6 +233,7 @@ export class AudioEngine {
 
   async play(): Promise<void> {
     if (!this.hasSource()) return
+    this.endUnlock()
     await this.audio.play()
     this.notify()
   }
@@ -206,6 +246,7 @@ export class AudioEngine {
   /** Carga una URL y resuelve cuando hay metadatos (duracion) y se ha posicionado en `startAt`. */
   load(url: string, startAt = 0): Promise<void> {
     this.cancelPendingLoad?.()
+    this.endUnlock()
     return new Promise<void>((resolve, reject) => {
       const audio = this.audio
       const cleanup = () => {

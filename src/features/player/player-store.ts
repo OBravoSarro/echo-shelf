@@ -3,9 +3,8 @@ import type { AudioTrack } from '../../domain/audiobook'
 import { audioEngine } from '../../infrastructure/audio/audio-engine'
 import { resolvePlayableMime, withPlayableType } from '../../infrastructure/audio/audio-mime'
 import { db } from '../../infrastructure/persistence/db'
-import { driveApi } from '../../infrastructure/google-drive/drive-api'
 import { useLibraryStore } from '../library/library-store'
-import { useAuthStore } from '../auth/auth-store'
+import { coverKey, resolveArtwork } from '../library/cover-source'
 import { useDownloadStore } from '../downloads/download-store'
 import { fetchRemoteTrack, isAbortError, readLocalTrack } from './track-source'
 
@@ -62,8 +61,7 @@ const PROGRESS_THROTTLE_MS = 200
 
 let currentObjectUrl: string | undefined
 let progressSaveTimer: number | undefined
-const artworkCache = new Map<string, string>()
-const artworkTypes = new Map<string, string>()
+const artworkByCover = new Map<string, MediaImage[]>()
 const autoMarkedRead = new Set<string>()
 const prefetchRequested = new Set<string>()
 let lastMetadataKey: string | undefined
@@ -85,6 +83,18 @@ let pendingStartAt = 0
  */
 let preparedNext: { trackId: string; blob: Blob } | undefined
 const PREPARE_NEXT_SECONDS = 45
+
+// Autorrecuperacion: si el audio cargado falla o se queda atascado (iOS suelta
+// el blob tras una pausa larga en segundo plano), se recarga el capitulo desde
+// el dispositivo en la misma posicion, sin que el usuario tenga que abrir la app.
+const RECOVERY_WINDOW_MS = 60_000
+const MAX_RECOVERIES_PER_WINDOW = 2
+const STALL_TIMEOUT_MS = 10_000
+let recoveries: number[] = []
+let lastPlayingAt = 0
+/** Ultima posicion leida con el audio sano (al fallar, el <audio> vuelve a 0). */
+let lastGoodPosition = 0
+let stallTimer: number | undefined
 
 const isTrackCompleted = (position: number, duration: number): boolean => {
   if (!Number.isFinite(duration) || duration <= 0) return false
@@ -122,44 +132,27 @@ const saveProgress = async (): Promise<void> => {
   })
 }
 
-const resolveArtworkUrl = async (bookId: string, coverFileId?: string, coverUrl?: string): Promise<string | undefined> => {
-  if (!coverFileId) {
-    return coverUrl
-  }
-  const token = useAuthStore.getState().accessToken
-  if (!token) {
-    return coverUrl
-  }
-  const key = `${bookId}:${coverFileId}`
-  if (artworkCache.has(key)) {
-    return artworkCache.get(key)
-  }
-  try {
-    const blob = await driveApi.download(token, coverFileId)
-    const url = URL.createObjectURL(blob)
-    artworkCache.set(key, url)
-    artworkTypes.set(url, blob.type || 'image/jpeg')
-    return url
-  } catch {
-    return coverUrl
-  }
-}
-
-const updateMediaSession = (bookId: string | undefined, track: AudioTrack | undefined): void => {
-  if (!('mediaSession' in navigator) || !bookId || !track) return
+const updateMediaSession = (bookId: string | undefined, track: AudioTrack | undefined, force = false): void => {
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined' || !bookId || !track) return
   const key = `${bookId}:${track.id}`
-  if (lastMetadataKey === key) return
+  if (!force && lastMetadataKey === key) return
   lastMetadataKey = key
   const book = useLibraryStore.getState().books.find((item) => item.id === bookId)
   if (!book) return
   const base = { title: track.title, artist: `${book.author} · ${book.narrator}`, album: book.title }
-  navigator.mediaSession.metadata = new MediaMetadata(base)
-  void resolveArtworkUrl(book.id, book.coverFileId, book.coverUrl).then((artworkSrc) => {
-    if (!artworkSrc || lastMetadataKey !== key) return
-    navigator.mediaSession.metadata = new MediaMetadata({
-      ...base,
-      artwork: [{ src: artworkSrc, sizes: '512x512', type: artworkTypes.get(artworkSrc) ?? 'image/jpeg' }],
-    })
+  const apply = (artwork?: MediaImage[]) => {
+    navigator.mediaSession.metadata = new MediaMetadata(artwork ? { ...base, artwork } : base)
+  }
+  // Con la caratula ya resuelta se publica todo de una vez: cambiar de capitulo
+  // no deja la pantalla de bloqueo / CarPlay sin imagen ni un instante.
+  const cover = coverKey(book)
+  const known = artworkByCover.get(cover)
+  apply(known)
+  if (known) return
+  void resolveArtwork(book).then((artwork) => {
+    if (!artwork) return
+    artworkByCover.set(cover, artwork)
+    if (lastMetadataKey === key) apply(artwork)
   })
 }
 
@@ -199,6 +192,26 @@ const maybePrefetchNext = (): void => {
 type SetState = (partial: Partial<PlayerState>) => void
 type GetState = () => PlayerState
 
+const clearStallTimer = (): void => {
+  if (stallTimer === undefined) return
+  window.clearTimeout(stallTimer)
+  stallTimer = undefined
+}
+
+/**
+ * Recarga el capitulo actual donde se quedo. Devuelve false si ya se ha
+ * intentado demasiadas veces seguidas (archivo realmente danado).
+ */
+const recoverPlayback = (set: SetState, get: GetState, autoplay: boolean): boolean => {
+  const now = Date.now()
+  recoveries = recoveries.filter((time) => now - time < RECOVERY_WINDOW_MS)
+  if (recoveries.length >= MAX_RECOVERIES_PER_WINDOW) return false
+  recoveries.push(now)
+  const startAt = loadedTrackId === get().currentTrackId ? lastGoodPosition : pendingStartAt
+  void activateTrack(set, get, currentIndex(), { autoplay, startAt })
+  return true
+}
+
 /**
  * Activa la pista `index` de la cola. Siempre intenta primero el archivo local;
  * solo si no existe (y hay que reproducir) lo baja de Drive, mostrando progreso.
@@ -217,6 +230,7 @@ const activateTrack = async (
   loadedTrackId = undefined
   pendingStartAt = startAt
   if (progressSaveTimer) window.clearTimeout(progressSaveTimer)
+  clearStallTimer()
 
   audioEngine.selectIndex(index)
   const track = audioEngine.getState().currentTrack
@@ -281,8 +295,11 @@ const activateTrack = async (
     await audioEngine.load(currentObjectUrl, startAt)
     if (isStale()) return
     loadedTrackId = track.id
+    lastGoodPosition = startAt
     audioEngine.setSpeed(get().speed)
     set({ source })
+    // iOS puede vaciar "Ahora suena" al cambiar la fuente: se vuelve a publicar.
+    updateMediaSession(get().activeBookId, track, true)
 
     if (loadAutoplay) {
       try {
@@ -306,7 +323,9 @@ const activateTrack = async (
   }
 }
 
-const currentIndex = (): number => audioEngine.getState().currentIndex
+function currentIndex(): number {
+  return audioEngine.getState().currentIndex
+}
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   queue: [],
@@ -327,6 +346,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const currentTrackId = state.currentTrack?.id
       const currentBookId = get().activeBookId
       const hasAudio = loadedTrackId !== undefined && loadedTrackId === currentTrackId
+      // Una fuente rota emite posicion 0 y duracion 0 antes del evento de error:
+      // esos valores no deben pisar la posicion real.
+      const healthy = hasAudio && state.duration > 0
+      if (healthy) lastGoodPosition = state.position
       set({
         queue: state.queue,
         currentTrackId,
@@ -334,9 +357,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         playing: hasAudio && state.playing,
         buffering: hasAudio && state.buffering && state.playing,
         // Mientras no hay audio cargado se mantiene la posicion/duracion "prevista".
-        ...(hasAudio ? { position: state.position, duration: state.duration } : {}),
+        ...(healthy ? { position: state.position, duration: state.duration } : {}),
         speed: state.speed,
       })
+      if (hasAudio && state.playing) lastPlayingAt = Date.now()
+      if (hasAudio && state.playing && state.buffering) {
+        // Todo el audio es local (blob): un buffering largo es un atasco, no red lenta.
+        stallTimer ??= window.setTimeout(() => {
+          stallTimer = undefined
+          if (!audioEngine.getState().buffering || loadedTrackId !== get().currentTrackId) return
+          recoverPlayback(set, get, true)
+        }, STALL_TIMEOUT_MS)
+      } else {
+        clearStallTimer()
+      }
       if (!hasAudio || !currentBookId || !currentTrackId) return
       if (isTrackCompleted(state.position, state.duration)) {
         void markTrackAsRead(currentBookId, currentTrackId)
@@ -377,6 +411,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       if (index < queue.length - 1) {
         void activateTrack(set, get, index + 1, { autoplay: true })
       }
+    })
+
+    audioEngine.onError((message) => {
+      const { currentTrackId } = get()
+      if (!currentTrackId || loadedTrackId !== currentTrackId) return
+      const wasPlaying = Date.now() - lastPlayingAt < 2000
+      if (recoverPlayback(set, get, wasPlaying)) return
+      set({ pending: false, error: message, loadStatus: { phase: 'error', trackId: currentTrackId, message } })
     })
 
     const media = navigator.mediaSession
@@ -468,6 +510,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ error: undefined, loadStatus: { phase: 'idle', trackId: track.id } })
       await audioEngine.play()
     } catch (error) {
+      // Un pause justo despues del play lo interrumpe: no es un fallo.
+      if (isAbortError(error)) return
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        set({ loadStatus: { phase: 'idle', trackId: track.id, message: 'Pulsa play para continuar.' } })
+        return
+      }
+      // El audio cargado ya no es valido (tipico tras una pausa larga en
+      // segundo plano): se recarga del dispositivo y se sigue donde estaba.
+      if (recoverPlayback(set, get, true)) return
       const message = error instanceof Error ? error.message : 'No se pudo reproducir.'
       set({ error: message, loadStatus: { phase: 'error', trackId: track.id, message } })
     }

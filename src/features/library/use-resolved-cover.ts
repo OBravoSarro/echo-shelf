@@ -1,34 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { driveApi } from '../../infrastructure/google-drive/drive-api'
-import { fileStorage } from '../../infrastructure/persistence/file-storage'
 import { useAuthStore } from '../auth/auth-store'
-
-const coverCache = new Map<string, string>()
-
-const isDriveHostedCoverUrl = (value?: string): boolean => {
-  if (!value) return false
-  try {
-    const parsed = new URL(value)
-    return (
-      parsed.hostname.includes('drive.google.com') ||
-      parsed.hostname.includes('googleusercontent.com') ||
-      parsed.searchParams.has('id')
-    )
-  } catch {
-    return false
-  }
-}
-
-const extractDriveFileIdFromUrl = (url?: string): string | undefined => {
-  if (!url) return undefined
-  try {
-    const parsed = new URL(url)
-    const id = parsed.searchParams.get('id')
-    return id ?? undefined
-  } catch {
-    return undefined
-  }
-}
+import { extractDriveFileIdFromUrl, getCoverObjectUrl, isDriveHostedCoverUrl } from './cover-source'
 
 export const useResolvedCover = ({
   bookId,
@@ -41,6 +13,7 @@ export const useResolvedCover = ({
   coverFileId?: string
   coverUrl?: string
 }) => {
+  // Solo como disparador: cuando llega el token se reintenta una portada pendiente.
   const accessToken = useAuthStore((state) => state.accessToken)
   const effectiveCoverFileId = useMemo(() => coverFileId ?? extractDriveFileIdFromUrl(coverUrl), [coverFileId, coverUrl])
   const preferDirectUrl = Boolean(coverUrl && !isDriveHostedCoverUrl(coverUrl))
@@ -57,40 +30,13 @@ export const useResolvedCover = ({
   useEffect(() => {
     let cancelled = false
     const resolve = async () => {
-      if (preferDirectUrl) {
+      if (preferDirectUrl || !effectiveCoverFileId || source !== 'drive') {
         setResolvedCover(coverUrl)
         return
       }
-      if (source === 'drive' && bookId && effectiveCoverFileId) {
-        const local = await fileStorage.read(`cover-${bookId}`)
-        if (local) {
-          const localUrl = URL.createObjectURL(local)
-          setResolvedCover(localUrl)
-          return
-        }
-      }
-      if (!effectiveCoverFileId || source !== 'drive' || !accessToken) {
-        setResolvedCover(coverUrl)
-        return
-      }
-      setResolvedCover(undefined)
-      const key = `${effectiveCoverFileId}:${accessToken.slice(0, 12)}`
-      if (coverCache.has(key)) {
-        setResolvedCover(coverCache.get(key))
-        return
-      }
-      try {
-        const blob = await driveApi.download(accessToken, effectiveCoverFileId)
-        const objectUrl = URL.createObjectURL(blob)
-        coverCache.set(key, objectUrl)
-        if (!cancelled) {
-          setResolvedCover(objectUrl)
-        }
-      } catch {
-        if (!cancelled) {
-          setResolvedCover(coverUrl)
-        }
-      }
+      // Local primero (funciona sin red ni sesion); si no esta, se baja y se guarda.
+      const url = await getCoverObjectUrl(bookId, effectiveCoverFileId)
+      if (!cancelled) setResolvedCover(url ?? coverUrl)
     }
     void resolve()
     return () => {
