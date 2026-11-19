@@ -12,6 +12,25 @@ Politica actual de versiones (pre-1.0):
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-19
+
+### Changed
+- Procesador de audiolibros: la salida es siempre MP3 (compatible con iPhone); solo se copia sin recodificar cuando el origen ya es MP3.
+
+### Fixed
+- Reanudar tras una pausa (sobre todo offline y en iPhone): si el sistema ha soltado el audio cargado mientras la app estaba en segundo plano, el capitulo se recarga solo desde el dispositivo en la misma posicion, tanto al pulsar play (app, pantalla de bloqueo, CarPlay) como si falla o se atasca mientras suena. Antes el fallo se ignoraba y habia que abrir la app y volver a cargar.
+- Caratula en pantalla de bloqueo / CarPlay / Android Auto: se toma de la copia guardada en el dispositivo (antes se bajaba de Drive cada vez y sin red o con la sesion caducada desaparecia), se reduce a 512 px y se publica en una URL propia servida por el service worker en lugar de un `blob:`.
+- La caratula ya no parpadea ni se pierde al cambiar de capitulo: los metadatos se publican de una vez con la imagen y se reenvian al cargar cada capitulo.
+- Cambio de capitulo con la pantalla bloqueada: el audio anterior ya no se descarga antes de tener el siguiente, para que iOS no suelte la sesion de audio en el hueco.
+- Una actualizacion de la app ya no recarga la pagina en plena escucha: espera a que este en pausa y a la vista.
+- Tocar un capitulo no descargado con otro ya cargado: el play ya no queda bloqueado por iOS al terminar la descarga.
+- Pausar justo despues de dar a play ya no muestra un error.
+- Las portadas vistas online se guardan en el dispositivo y se comparten entre componentes (antes se creaba una URL nueva por cada tarjeta).
+
+### Technical
+- `cover-source.ts`: fuente unica de portadas (local primero) para la UI y Media Session; cache `book-covers` con ruta `CacheOnly` `/covers/*` en Workbox.
+- `AudioEngine`: evento `onError` fuera de las cargas, desbloqueo silenciado sobre audio real y `selectIndex` sin vaciar la fuente.
+
 ## [0.4.1] - 2026-11-18
 
 ### Changed
