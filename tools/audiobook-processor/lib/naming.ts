@@ -34,19 +34,7 @@ export const buildFolderName = (meta: BookMeta): string => {
   return sanitizeSegment(name)
 }
 
-export const outputExtension = (codec: string, enhance: boolean): string => {
-  if (enhance) return 'm4a'
-  switch (codec) {
-    case 'mp3':
-      return 'mp3'
-    case 'opus':
-      return 'opus'
-    case 'vorbis':
-      return 'ogg'
-    default:
-      return 'm4a'
-  }
-}
+export const outputExtension = (_codec: string, _enhance: boolean): string => 'mp3'
 
 export const chapterFileName = (position: number, total: number, title: string, ext: string): string => {
   const width = Math.max(2, String(total).length)

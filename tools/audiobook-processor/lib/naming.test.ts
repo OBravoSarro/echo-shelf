@@ -38,9 +38,9 @@ describe('chapterFileName', () => {
 })
 
 describe('outputExtension', () => {
-  it('always produces m4a when re-encoding and preserves the container on copy', () => {
-    expect(outputExtension('mp3', true)).toBe('m4a')
+  it('always produces mp3 for iPhone-compatible outputs', () => {
+    expect(outputExtension('mp3', true)).toBe('mp3')
     expect(outputExtension('mp3', false)).toBe('mp3')
-    expect(outputExtension('aac', false)).toBe('m4a')
+    expect(outputExtension('aac', false)).toBe('mp3')
   })
 })

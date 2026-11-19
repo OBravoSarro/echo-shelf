@@ -112,8 +112,8 @@ export class JobManager {
       await mkdir(tempDir, { recursive: true })
       log(
         request.enhance
-          ? `Procesando ${total} capítulos con mejora de voz (${request.preset}, AAC ${request.bitrateKbps} kbps)`
-          : `Cortando ${total} capítulos sin recodificar (copia directa)`,
+          ? `Procesando ${total} capítulos con mejora de voz (${request.preset}, MP3 ${request.bitrateKbps} kbps)`
+          : `Procesando ${total} capítulos sin mejora de voz (salida MP3)`,
       )
 
       if (probe.cover) {
@@ -142,6 +142,7 @@ export class JobManager {
               output: join(tempDir, chapterState.fileName),
               start: selection.start,
               end: selection.end,
+              sourceCodec: probe.codec,
               enhance: request.enhance,
               preset: request.preset,
               bitrateKbps: request.bitrateKbps,

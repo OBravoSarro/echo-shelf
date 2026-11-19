@@ -69,6 +69,10 @@
           <div class="section-head">
             <h2>Capítulos <span id="chapter-count" class="muted"></span></h2>
             <div class="row">
+              <label class="check small-check" title="Numera solo los capítulos seleccionados. Al desactivarlo vuelven los títulos originales.">
+                <input id="generic-titles" type="checkbox" />
+                <span>Títulos genéricos <span class="muted">(Capítulo 01, 02…)</span></span>
+              </label>
               <button id="select-all" class="ghost small" type="button">Todos</button>
               <button id="select-none" class="ghost small" type="button">Ninguno</button>
             </div>
@@ -104,8 +108,8 @@
             <span>
               <strong>Mejorar la voz</strong>
               <span class="muted small block">
-                Recodifica a AAC aplicando filtros para que la voz se entienda mejor. Si lo desactivas, solo se corta:
-                es instantáneo y no pierde calidad.
+                Genera ficheros MP3 compatibles con iPhone. Activado aplica filtros para que la voz se entienda mejor;
+                desactivado mantiene el audio sin filtros (si el origen no es MP3, se recodifica igualmente a MP3).
               </span>
             </span>
           </label>

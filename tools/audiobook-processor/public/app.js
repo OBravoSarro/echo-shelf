@@ -10,6 +10,7 @@ const state = {
   folderTouched: false,
   job: null,
   jobSource: null,
+  genericTitles: false,
 }
 
 // ---------- helpers ----------
@@ -83,6 +84,18 @@ const debounce = (fn, ms) => {
 }
 
 const selectedChapters = () => state.chapters.filter((c) => c.include)
+
+/**
+ * Generic titles are derived, never stored: the original/edited title survives in c.title
+ * so turning the option off restores it. Numbering follows the selected position and uses
+ * the same zero-padding as the file prefix (lib/naming.ts chapterFileName).
+ */
+const displayTitle = (chapter) => {
+  if (!state.genericTitles || !chapter.include) return chapter.title
+  const selected = selectedChapters()
+  const width = Math.max(2, String(selected.length).length)
+  return `Capítulo ${String(selected.indexOf(chapter) + 1).padStart(width, '0')}`
+}
 
 // ---------- status & files ----------
 
@@ -267,6 +280,7 @@ const renderChapters = () => {
           onchange: (e) => {
             c.include = e.target.checked
             renderChapters()
+            renderPreviewChapters()
             renderSummary()
           },
         }),
@@ -277,7 +291,8 @@ const renderChapters = () => {
         { className: 'title' },
         h('input', {
           type: 'text',
-          value: c.title,
+          value: displayTitle(c),
+          readOnly: state.genericTitles && c.include,
           oninput: (e) => {
             c.title = e.target.value
             renderPreviewChapters()
@@ -329,7 +344,7 @@ const renderPreviewChapters = () => {
   const select = $('preview-chapter')
   const previous = select.value
   select.replaceChildren(
-    ...state.chapters.map((c, i) => h('option', { value: String(i) }, `${i + 1}. ${c.title || 'Sin título'}`)),
+    ...state.chapters.map((c, i) => h('option', { value: String(i) }, `${i + 1}. ${displayTitle(c) || 'Sin título'}`)),
   )
   if (previous && Number(previous) < state.chapters.length) select.value = previous
 }
@@ -360,12 +375,18 @@ const renderSummary = () => {
   const seconds = chapters.reduce((sum, c) => sum + (c.end - c.start), 0)
   const enhance = $('enhance').checked
   $('enhance-options').classList.toggle('disabled', !enhance)
-  const size = enhance
-    ? (seconds * Number($('bitrate').value) * 1000) / 8
-    : state.probe.duration > 0
+  const selectedBitrate = Number($('bitrate').value)
+  const canCopyMp3 = !enhance && state.probe.codec?.toLowerCase() === 'mp3'
+  const size = canCopyMp3
+    ? state.probe.duration > 0
       ? (state.probe.sizeBytes * seconds) / state.probe.duration
       : 0
-  const mode = enhance ? `con mejora de voz «${state.presets[currentPreset()]?.label ?? ''}»` : 'sin recodificar (copia directa)'
+    : (seconds * selectedBitrate * 1000) / 8
+  const mode = enhance
+    ? `con mejora de voz «${state.presets[currentPreset()]?.label ?? ''}» en MP3`
+    : canCopyMp3
+      ? 'sin mejora de voz (copia MP3 directa)'
+      : `sin mejora de voz (recodificado a MP3 ${selectedBitrate} kbps)`
   $('summary-text').textContent = chapters.length
     ? `${chapters.length} ficheros (${formatDuration(seconds)}) ${mode} · ≈ ${formatBytes(size)}${state.probe.cover ? ' + portada' : ''}. Se guardará en output/${$('folder-name').value}/`
     : 'Selecciona al menos un capítulo.'
@@ -374,7 +395,7 @@ const renderSummary = () => {
 
 const startProcess = async () => {
   const chapters = selectedChapters()
-  const untitled = chapters.findIndex((c) => !c.title.trim())
+  const untitled = chapters.findIndex((c) => !displayTitle(c).trim())
   if (untitled >= 0) return toast('Hay capítulos sin título', true)
   try {
     const job = await api('/api/jobs', {
@@ -389,7 +410,7 @@ const startProcess = async () => {
           year: state.probe.meta.year,
           genre: state.probe.meta.genre,
         },
-        chapters: chapters.map((c) => ({ title: c.title.trim(), start: c.start, end: c.end })),
+        chapters: chapters.map((c) => ({ title: displayTitle(c).trim(), start: c.start, end: c.end })),
         enhance: $('enhance').checked,
         preset: currentPreset(),
         bitrateKbps: Number($('bitrate').value),
@@ -489,12 +510,19 @@ const init = async () => {
   $('select-all').addEventListener('click', () => {
     state.chapters.forEach((c) => (c.include = true))
     renderChapters()
+    renderPreviewChapters()
     renderSummary()
   })
   $('select-none').addEventListener('click', () => {
     state.chapters.forEach((c) => (c.include = false))
     renderChapters()
+    renderPreviewChapters()
     renderSummary()
+  })
+  $('generic-titles').addEventListener('change', (e) => {
+    state.genericTitles = e.target.checked
+    renderChapters()
+    renderPreviewChapters()
   })
   $('apply-split').addEventListener('click', applySplit)
   $('enhance').addEventListener('change', renderSummary)

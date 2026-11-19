@@ -65,6 +65,7 @@ export interface ChapterArgsOptions {
   output: string
   start: number
   end: number
+  sourceCodec?: string
   enhance: boolean
   preset: VoicePreset
   bitrateKbps: number
@@ -103,12 +104,14 @@ export const buildChapterArgs = (o: ChapterArgsOptions): string[] => {
       '-af',
       buildFilterChain(o.preset, o.sampleRate),
       '-c:a',
-      'aac',
+      'libmp3lame',
       '-b:a',
       `${o.bitrateKbps}k`,
     )
-  } else {
+  } else if (o.output.endsWith('.mp3') && o.sourceCodec?.toLowerCase() === 'mp3') {
     args.push('-c:a', 'copy')
+  } else {
+    args.push('-c:a', 'libmp3lame', '-b:a', `${o.bitrateKbps}k`)
   }
 
   const tags: Record<string, string> = {
@@ -123,7 +126,6 @@ export const buildChapterArgs = (o: ChapterArgsOptions): string[] => {
     if (value) args.push('-metadata', `${key}=${value}`)
   }
 
-  if (o.output.endsWith('.m4a')) args.push('-movflags', '+faststart')
   args.push('-progress', 'pipe:1', '-nostats', o.output)
   return args
 }

@@ -4,7 +4,7 @@ import { VOICE_PRESETS, buildChapterArgs, buildFilterChain, buildPreviewArgs, pa
 const meta = { title: 'Dune', author: 'Frank Herbert', narrator: 'Simon Vance' }
 const base = {
   input: '/in/dune.m4b',
-  output: '/out/01 - Uno.m4a',
+  output: '/out/01 - Uno.mp3',
   start: 10,
   end: 70.25,
   preset: 'soft' as const,
@@ -42,14 +42,21 @@ describe('buildChapterArgs', () => {
 
   it('re-encodes with filters when enhancing', () => {
     const args = buildChapterArgs({ ...base, enhance: true })
-    expect(valueAfter(args, '-c:a')).toBe('aac')
+    expect(valueAfter(args, '-c:a')).toBe('libmp3lame')
     expect(valueAfter(args, '-b:a')).toBe('96k')
     expect(valueAfter(args, '-af')).toContain('afftdn')
   })
 
-  it('stream-copies without filters when not enhancing', () => {
-    const args = buildChapterArgs({ ...base, enhance: false })
+  it('stream-copies when not enhancing and the source is already mp3', () => {
+    const args = buildChapterArgs({ ...base, enhance: false, sourceCodec: 'mp3' })
     expect(valueAfter(args, '-c:a')).toBe('copy')
+    expect(args).not.toContain('-af')
+  })
+
+  it('re-encodes to mp3 when not enhancing and the source is not mp3', () => {
+    const args = buildChapterArgs({ ...base, enhance: false, sourceCodec: 'aac' })
+    expect(valueAfter(args, '-c:a')).toBe('libmp3lame')
+    expect(valueAfter(args, '-b:a')).toBe('96k')
     expect(args).not.toContain('-af')
   })
 
