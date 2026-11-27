@@ -12,6 +12,20 @@ Politica actual de versiones (pre-1.0):
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-27
+
+### Fixed
+- Reanudar al reabrir la app: el progreso se guarda cada 5 s mientras suena. Antes el guardado se reiniciaba con cada actualizacion de tiempo y, sonando, nunca llegaba a hacerse; si iOS cerraba la app con la pantalla bloqueada se volvia a donde se habia bloqueado o al principio del capitulo.
+- Al pasar de capitulo se guarda en el acto el capitulo nuevo, para no volver al anterior si la app se cierra.
+- Un capitulo solo cuenta como terminado en sus 3 ultimos segundos (antes, en el 98 %: en capitulos de 1 h se saltaba el ultimo minuto largo) y al reabrir un capitulo terminado se sigue en el siguiente en lugar de empezarlo otra vez desde 0. Marcar como leido en el listado sigue usando el umbral del 98 %.
+- iPhone: si Safari ignora el salto a la posicion guardada al abrir el capitulo, se reaplica en cuanto el audio esta listo (antes arrancaba en 0).
+- Duracion de los capitulos en el listado: se mide la duracion real de cada MP3 leyendo solo su cabecera en Drive (~64 KB), en vez de mostrar una media estimada hasta reproducirlo o descargarlo. Sincronizar con Drive ya no borra las duraciones medidas.
+
+### Technical
+- `lib/mp3-duration.ts`: duracion por cabecera Xing/Info/VBRI o tamano/bitrate (CBR), con salto de ID3v2. `driveApi.downloadRange` para lecturas con `Range`.
+- `duration-probe.ts`: medicion secuencial en segundo plano tras sincronizar; `mergeKnownDurations` en el escaner.
+- Subida del progreso a Firestore limitada a una cada 30 s por libro (inmediata al cambiar de capitulo o terminarlo).
+
 ## [0.4.2] - 2026-11-19
 
 ### Changed
