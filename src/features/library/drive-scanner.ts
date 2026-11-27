@@ -43,6 +43,23 @@ const resolveDriveDurationSeconds = (file: DriveFile): number | undefined => {
   return undefined
 }
 
+/** Suma de duraciones; las desconocidas se estiman con la media de las conocidas. */
+export const estimateTotalDurationSeconds = (bookTracks: AudioTrack[]): number => {
+  const knownDurations = bookTracks
+    .map((track) => (Number.isFinite(track.durationSeconds) ? Number(track.durationSeconds) : 0))
+    .filter((value) => value > 0)
+  const knownAverageDuration = knownDurations.length > 0
+    ? knownDurations.reduce((sum, value) => sum + value, 0) / knownDurations.length
+    : FALLBACK_TRACK_DURATION_SECONDS
+  return Math.round(
+    bookTracks.reduce((acc, track) => {
+      const value = Number(track.durationSeconds ?? 0)
+      if (Number.isFinite(value) && value > 0) return acc + value
+      return acc + knownAverageDuration
+    }, 0),
+  )
+}
+
 interface ScanResult {
   books: Audiobook[]
   tracks: AudioTrack[]
@@ -156,19 +173,7 @@ export const scanDriveLibrary = (files: DriveFile[]): ScanResult => {
       return track
     })
 
-    const knownDurations = bookTracks
-      .map((track) => (Number.isFinite(track.durationSeconds) ? Number(track.durationSeconds) : 0))
-      .filter((value) => value > 0)
-    const knownAverageDuration = knownDurations.length > 0
-      ? knownDurations.reduce((sum, value) => sum + value, 0) / knownDurations.length
-      : FALLBACK_TRACK_DURATION_SECONDS
-    const totalDurationSeconds = Math.round(
-      bookTracks.reduce((acc, track) => {
-        const value = Number(track.durationSeconds ?? 0)
-        if (Number.isFinite(value) && value > 0) return acc + value
-        return acc + knownAverageDuration
-      }, 0),
-    )
+    const totalDurationSeconds = estimateTotalDurationSeconds(bookTracks)
 
     books.push({
       id: bookId,
@@ -191,4 +196,21 @@ export const scanDriveLibrary = (files: DriveFile[]): ScanResult => {
     books: books.sort((a, b) => naturalCompare(a.title, b.title)),
     tracks,
   }
+}
+
+/**
+ * Completa las duraciones que Drive no da con las ya medidas en el dispositivo
+ * y recalcula el total de cada libro.
+ */
+export const mergeKnownDurations = (scan: ScanResult, known: Map<string, number | undefined>): ScanResult => {
+  const tracks = scan.tracks.map((track) => {
+    if (Number(track.durationSeconds ?? 0) > 0) return track
+    const learned = Number(known.get(track.id) ?? 0)
+    return Number.isFinite(learned) && learned > 0 ? { ...track, durationSeconds: learned } : track
+  })
+  const books = scan.books.map((book) => ({
+    ...book,
+    totalDurationSeconds: estimateTotalDurationSeconds(tracks.filter((track) => track.bookId === book.id)),
+  }))
+  return { books, tracks }
 }

@@ -13,7 +13,35 @@ import {
 } from '../../infrastructure/firebase/reading-sync'
 import { driveApi } from '../../infrastructure/google-drive/drive-api'
 import { fileStorage } from '../../infrastructure/persistence/file-storage'
-import { scanDriveLibrary } from './drive-scanner'
+import { mergeKnownDurations, scanDriveLibrary } from './drive-scanner'
+import { probeMissingDurations } from './duration-probe'
+
+/**
+ * El progreso se guarda en el dispositivo cada pocos segundos mientras suena;
+ * a la nube basta con subirlo cada 30 s (o al momento si cambia de capitulo),
+ * para no disparar escrituras en Firestore.
+ */
+const CLOUD_PROGRESS_INTERVAL_MS = 30_000
+const cloudProgressPushes = new Map<string, { at: number; trackId: string; timer?: number; pending?: ListeningProgress }>()
+
+const scheduleCloudProgressPush = (userId: string, progress: ListeningProgress): void => {
+  const entry = cloudProgressPushes.get(progress.bookId)
+  const now = Date.now()
+  const push = (item: ListeningProgress) => {
+    cloudProgressPushes.set(item.bookId, { at: Date.now(), trackId: item.trackId })
+    void pushCloudProgress(userId, item)
+  }
+  if (!entry || entry.trackId !== progress.trackId || progress.completed || now - entry.at >= CLOUD_PROGRESS_INTERVAL_MS) {
+    if (entry?.timer) window.clearTimeout(entry.timer)
+    push(progress)
+    return
+  }
+  entry.pending = progress
+  entry.timer ??= window.setTimeout(() => {
+    const latest = cloudProgressPushes.get(progress.bookId)?.pending
+    if (latest) push(latest)
+  }, CLOUD_PROGRESS_INTERVAL_MS - (now - entry.at))
+}
 
 type MutationSource = 'local' | 'remote'
 
@@ -263,8 +291,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       await driveApi.ping(accessToken, normalizedRootId)
       const files = await driveApi.listFolderTree(accessToken, normalizedRootId)
       const scanned = scanDriveLibrary(files)
-      const books = await applyStoredOverrides(scanned.books)
-      const tracks = scanned.tracks
+      // Drive no informa la duracion de los MP3: se conservan las ya conocidas
+      // (medidas al reproducir/descargar) en vez de volver a la estimacion.
+      const known = new Map((await db.tracks.toArray()).map((track) => [track.id, track.durationSeconds]))
+      const merged = mergeKnownDurations(scanned, known)
+      const books = await applyStoredOverrides(merged.books)
+      const tracks = merged.tracks
       await db.transaction('rw', [db.books, db.tracks, db.settings], async () => {
         await db.books.clear()
         await db.tracks.clear()
@@ -284,6 +316,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         loading: false,
       })
       void prefetchDriveCovers(books, accessToken)
+      void probeMissingDurations(tracks, accessToken, (bookId, trackId, seconds) => get().upsertTrackDuration(bookId, trackId, seconds))
     } catch (error) {
       set({
         loading: false,
@@ -300,7 +333,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       },
     }))
     if (source === 'local' && cloudSyncUserId && canUseReadingSync()) {
-      void pushCloudProgress(cloudSyncUserId, progress)
+      scheduleCloudProgressPush(cloudSyncUserId, progress)
     }
   },
   async upsertTrackDuration(bookId, trackId, durationSeconds) {

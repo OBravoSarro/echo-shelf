@@ -6,6 +6,7 @@ import { db } from '../../infrastructure/persistence/db'
 import { useLibraryStore } from '../library/library-store'
 import { coverKey, resolveArtwork } from '../library/cover-source'
 import { useDownloadStore } from '../downloads/download-store'
+import { resolveResumeIndex } from './resume'
 import { fetchRemoteTrack, isAbortError, readLocalTrack } from './track-source'
 
 /**
@@ -96,11 +97,27 @@ let lastPlayingAt = 0
 let lastGoodPosition = 0
 let stallTimer: number | undefined
 
-const isTrackCompleted = (position: number, duration: number): boolean => {
+/** Casi al final: suficiente para marcar el capitulo como leido en el listado. */
+const isTrackNearlyDone = (position: number, duration: number): boolean => {
   if (!Number.isFinite(duration) || duration <= 0) return false
   if (position >= duration - 8) return true
   return position / duration >= 0.98
 }
+
+/**
+ * Terminado de verdad: al reabrir se sigue en el capitulo siguiente. Con el
+ * umbral del 98 % se saltaba el ultimo minuto largo de los capitulos de 1 h.
+ */
+const FINISHED_TAIL_SECONDS = 3
+const isTrackFinished = (position: number, duration: number): boolean =>
+  Number.isFinite(duration) && duration > 0 && position >= duration - FINISHED_TAIL_SECONDS
+
+/**
+ * Cada cuanto se guarda el progreso mientras suena. Antes era un debounce que
+ * cada `timeupdate` reiniciaba, asi que sonando nunca llegaba a guardarse.
+ */
+const PROGRESS_SAVE_INTERVAL_MS = 5000
+let lastProgressSaveAt = 0
 
 const markTrackAsRead = async (bookId: string, trackId: string): Promise<void> => {
   const key = `${bookId}:${trackId}`
@@ -116,9 +133,10 @@ const saveProgress = async (): Promise<void> => {
   if (!player.activeBookId || !track) return
   // Sin audio cargado la posicion del <audio> es 0: no pisar el progreso guardado.
   if (loadedTrackId !== track.id) return
-  const completed = isTrackCompleted(player.position, player.duration)
+  lastProgressSaveAt = Date.now()
+  const completed = isTrackFinished(player.position, player.duration)
 
-  if (completed) {
+  if (completed || isTrackNearlyDone(player.position, player.duration)) {
     await markTrackAsRead(player.activeBookId, track.id)
   }
 
@@ -298,6 +316,9 @@ const activateTrack = async (
     lastGoodPosition = startAt
     audioEngine.setSpeed(get().speed)
     set({ source })
+    // Al pasar de capitulo (p. ej. con la pantalla bloqueada) se guarda ya en
+    // que capitulo estamos: si iOS mata la app, no se vuelve al anterior.
+    if (get().canPersistProgress) void saveProgress()
     // iOS puede vaciar "Ahora suena" al cambiar la fuente: se vuelve a publicar.
     updateMediaSession(get().activeBookId, track, true)
 
@@ -372,17 +393,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         clearStallTimer()
       }
       if (!hasAudio || !currentBookId || !currentTrackId) return
-      if (isTrackCompleted(state.position, state.duration)) {
+      if (isTrackNearlyDone(state.position, state.duration)) {
         void markTrackAsRead(currentBookId, currentTrackId)
       }
       if (Number.isFinite(state.duration) && state.duration > 0) {
         void useLibraryStore.getState().upsertTrackDuration(currentBookId, currentTrackId, state.duration)
       }
-      if (progressSaveTimer) window.clearTimeout(progressSaveTimer)
       if (get().canPersistProgress) {
-        progressSaveTimer = window.setTimeout(() => {
+        // Throttle (no debounce): mientras suena se guarda cada pocos segundos,
+        // y un guardado final recoge el ultimo cambio (pausa, seek).
+        if (progressSaveTimer) window.clearTimeout(progressSaveTimer)
+        const wait = Math.max(0, PROGRESS_SAVE_INTERVAL_MS - (Date.now() - lastProgressSaveAt))
+        if (wait === 0) {
+          progressSaveTimer = undefined
           void saveProgress()
-        }, 2500)
+        } else {
+          progressSaveTimer = window.setTimeout(() => {
+            progressSaveTimer = undefined
+            void saveProgress()
+          }, wait)
+        }
       }
       updateMediaSession(currentBookId, state.currentTrack)
       if ('mediaSession' in navigator) {
@@ -470,9 +500,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     const progress = await db.progress.get(bookId)
-    const targetId = trackId ?? progress?.trackId
-    const foundIndex = targetId ? tracks.findIndex((item) => item.id === targetId) : 0
-    const index = foundIndex >= 0 ? foundIndex : 0
+    const index = resolveResumeIndex(tracks, progress, trackId)
     const resumeHere = progress && progress.trackId === tracks[index].id && !progress.completed
     const startAt = resumeHere ? progress.positionSeconds : 0
 

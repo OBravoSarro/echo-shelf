@@ -263,7 +263,9 @@ export class AudioEngine {
         cleanup()
         if (startAt > 0) {
           const max = Number.isFinite(audio.duration) ? Math.max(0, audio.duration - 1) : startAt
-          audio.currentTime = Math.min(startAt, max)
+          const target = Math.min(startAt, max)
+          audio.currentTime = target
+          this.ensurePosition(url, target)
         }
         this.notify()
         resolve()
@@ -277,6 +279,35 @@ export class AudioEngine {
       audio.src = url
       audio.load()
     })
+  }
+
+  /**
+   * iOS/Safari a veces ignora el `currentTime` fijado en `loadedmetadata` (aun
+   * no hay rango "seekable") y el capitulo arranca en 0. Se reaplica cuando el
+   * audio ya puede sonar, solo si sigue al principio (no pisa un seek del usuario).
+   */
+  private ensurePosition(url: string, target: number): void {
+    const audio = this.audio
+    const events = ['canplay', 'playing', 'seeked'] as const
+    const stop = () => events.forEach((event) => audio.removeEventListener(event, check))
+    const check = () => {
+      if (audio.src !== url) {
+        stop()
+        return
+      }
+      if (audio.currentTime >= 1 || target < 1) {
+        stop()
+        return
+      }
+      if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+        stop()
+        audio.currentTime = target
+        this.notify()
+      }
+    }
+    events.forEach((event) => audio.addEventListener(event, check))
+    // Sin eventos pendientes (ya estaba listo), se limpia solo.
+    window.setTimeout(stop, 15_000)
   }
 
   unload(): void {

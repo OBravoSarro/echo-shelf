@@ -143,6 +143,23 @@ export const driveApi = {
     return all
   },
 
+  /** Lee solo un trozo del archivo (cabeceras de audio, etc.). */
+  async downloadRange(accessToken: string, fileId: string, start: number, endInclusive: number): Promise<Uint8Array> {
+    const url = new URL(`${DRIVE_BASE}/files/${fileId}`)
+    url.searchParams.set('alt', 'media')
+    url.searchParams.set('supportsAllDrives', 'true')
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}`, Range: `bytes=${start}-${endInclusive}` },
+    })
+    if (!response.ok) {
+      const detail = await parseDriveError(response)
+      throw new DriveHttpError(`Drive range read failed: ${detail}`, response.status)
+    }
+    const buffer = new Uint8Array(await response.arrayBuffer())
+    // Si el servidor ignora el Range (200) devuelve el archivo entero: recortar.
+    return response.status === 206 ? buffer : buffer.subarray(start, endInclusive + 1)
+  },
+
   async download(accessToken: string, fileId: string, options: AbortSignal | DownloadOptions = {}): Promise<Blob> {
     const opts: DownloadOptions = options instanceof AbortSignal ? { signal: options } : options
     const url = new URL(`${DRIVE_BASE}/files/${fileId}`)
